@@ -210,13 +210,15 @@ double FBodyTerrain::MicroRelief(const FAstroVector3d& Dir, double MinFeatureMet
     {
         return 0.0;
     }
-    // Self-affine roughness (Hurst ~0.8) from 200 m down to 0.5 m: planetary surfaces keep
-    // detail at every scale, which is what makes standing on them read as real.
+    // Self-affine roughness from 200 m down to 0.5 m: planetary surfaces keep detail at every
+    // scale, which is what makes standing on them read as real. Persistence 0.5 (Hurst 1)
+    // keeps slope roughly constant per octave (~10-15 deg RMS, like lunar regolith at 1 m);
+    // anything rougher makes metre-scale slopes grow without bound.
     double Wavelength = 200.0, Amplitude = 1.0, Sum = 0.0;
     for (int32 Octave = 0; Octave < 9 && Wavelength >= MinFeatureMeters; ++Octave)
     {
         Sum += GradientNoise(Dir * (Req / Wavelength), Seed + 104729u + Octave * 613u) * Amplitude;
-        Amplitude *= 0.57; // 2^-0.8
+        Amplitude *= 0.5;
         Wavelength *= 0.5;
     }
     return Sum * Row.MicroReliefM;
@@ -257,14 +259,16 @@ double FBodyTerrain::Craters(const FAstroVector3d& Dir, double MinFeatureMeters)
             {
                 continue;
             }
-            // Depth from the lunar depth-diameter relation (Pike 1974): simple craters d ~ 0.2 D,
-            // complex craters (D > 15 km) d = 1.044 D^0.301 km. Rim decays outward.
+            // Depth from the lunar depth-diameter relation (Pike 1974): complex craters (D > 15 km)
+            // d = 1.044 D^0.301 km. Simple craters are d ~ 0.2 D when fresh, but most are degraded
+            // (~0.1); 0.1 keeps overlapping walls at realistic slopes.
             const double DiameterKm = Radius * 2.0 / 1000.0;
-            const double Depth = DiameterKm < 15.0 ? 0.2 * DiameterKm * 1000.0 : 1044.0 * FMath::Pow(DiameterKm, 0.301);
+            const double Depth = DiameterKm < 15.0 ? FMath::Min(0.1 * DiameterKm * 1000.0, 1044.0 * FMath::Pow(DiameterKm, 0.301))
+                                                   : 1044.0 * FMath::Pow(DiameterKm, 0.301);
             const double Bowl = Dist < 1.0 ? (Dist * Dist - 1.0) * Depth : 0.0;
             // Taper to exactly zero by the 1.6-radius cutoff so rims never end in a step.
             const double Taper = 1.0 - FMath::SmoothStep(1.3, 1.6, Dist);
-            const double Rim = Depth * 0.3 * std::exp(-std::pow((Dist - 1.0) / 0.3, 2.0)) * Taper;
+            const double Rim = Depth * 0.2 * std::exp(-std::pow((Dist - 1.0) / 0.3, 2.0)) * Taper;
             Height += Bowl + Rim;
         }
         MaxRadius *= 0.5;

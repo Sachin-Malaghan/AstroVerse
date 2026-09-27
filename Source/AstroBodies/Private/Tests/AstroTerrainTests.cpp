@@ -47,33 +47,35 @@ bool FAstroTerrainBasicsTest::RunTest(const FString& Parameters)
     // A true discontinuity (a cliff that isn't there) keeps its size at any resolution.
     const FAstroVector3d P = AstroTerrainTests::LatLon(12.3, 45.6);
     TestEqual(TEXT("Same point, same height"), Moon.Terrain->HeightAt(P), Moon.Terrain->HeightAt(P));
-    auto WorstStep = [&](double StepMeters, int32 Steps, double& OutMin, double& OutMax, double& OutAt)
+    struct FProfileStats { double Worst = 0.0; double RmsSlope = 0.0; double MinH = 1e30; double MaxH = -1e30; };
+    auto Profile = [&](double StepMeters, int32 Steps)
     {
-        double Worst = 0.0;
-        OutMin = 1e30; OutMax = -1e30;
+        FProfileStats Stats;
+        double SumSq = 0.0;
         const double StepDeg = StepMeters / Moon.EquatorialRadiusMeters * AstroConstants::RadToDeg;
         double Prev = Moon.Terrain->HeightAt(AstroTerrainTests::LatLon(10.0, 30.0));
         for (int32 i = 1; i <= Steps; ++i)
         {
             const double H = Moon.Terrain->HeightAt(AstroTerrainTests::LatLon(10.0 + i * StepDeg, 30.0));
-            if (FMath::Abs(H - Prev) > Worst)
-            {
-                Worst = FMath::Abs(H - Prev);
-                OutAt = i * StepMeters;
-            }
-            OutMin = FMath::Min(OutMin, H);
-            OutMax = FMath::Max(OutMax, H);
+            const double Step = FMath::Abs(H - Prev);
+            Stats.Worst = FMath::Max(Stats.Worst, Step);
+            SumSq += FMath::Square(Step / StepMeters);
+            Stats.MinH = FMath::Min(Stats.MinH, H);
+            Stats.MaxH = FMath::Max(Stats.MaxH, H);
             Prev = H;
         }
-        return Worst;
+        Stats.RmsSlope = FMath::Sqrt(SumSq / Steps);
+        return Stats;
     };
-    double MinH, MaxH, At = 0.0, Unused, UnusedAt;
-    const double Coarse = WorstStep(1.0, 20000, MinH, MaxH, At);
-    const double Fine = WorstStep(0.25, 80000, Unused, Unused, UnusedAt);
-    AddInfo(FString::Printf(TEXT("Moon, 20 km transect: height %.0f .. %.0f m; worst step %.2f m per 1 m (at %.0f m), %.2f m per 0.25 m"),
-        MinH, MaxH, Coarse, At, Fine));
-    TestTrue(TEXT("No discontinuities (worst step scales with sample spacing)"), Fine < Coarse * 0.4 + 0.05);
-    TestTrue(TEXT("No cliffs steeper than ~70 deg"), Coarse < 3.0);
+    const FProfileStats Coarse = Profile(1.0, 20000);
+    const FProfileStats Fine = Profile(0.25, 80000);
+    const double RmsDeg = FMath::RadiansToDegrees(FMath::Atan(Coarse.RmsSlope));
+    AddInfo(FString::Printf(TEXT("Moon, 20 km transect: height %.0f .. %.0f m; RMS slope %.1f deg; worst step %.2f m per 1 m, %.2f m per 0.25 m"),
+        Coarse.MinH, Coarse.MaxH, RmsDeg, Coarse.Worst, Fine.Worst));
+    TestTrue(TEXT("No discontinuities (worst step scales with sample spacing)"), Fine.Worst < Coarse.Worst * 0.4 + 0.05);
+    // Lunar regolith: RMS slopes of roughly 10-20 deg at metre baselines.
+    TestTrue(TEXT("Metre-scale RMS slope is lunar-like (5-25 deg)"), RmsDeg > 5.0 && RmsDeg < 25.0);
+    TestTrue(TEXT("No near-vertical cliffs"), Coarse.Worst < 3.0);
 
     // Global relief range stays physically plausible (real lunar range ~ -9 .. +11 km).
     double GlobalMin = 1e30, GlobalMax = -1e30;
