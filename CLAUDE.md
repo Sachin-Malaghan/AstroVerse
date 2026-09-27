@@ -12,17 +12,17 @@ A production-grade C++ solar system simulator in Unreal Engine: true physical sc
 
 ## Build and test commands (UE 5.8 Launcher build, Windows)
 
-Launcher engine builds do not ship `GenerateProjectFiles.bat`; drive UnrealBuildTool through `Build.bat` instead. Engine root: `C:Program Filespic GamesE_5.8`.
+Launcher engine builds do not ship `GenerateProjectFiles.bat`; drive UnrealBuildTool through `Build.bat` instead. Engine root: `C:\Program Files\Epic Games\UE_5.8`.
 
 ```
 # Regenerate AstroVerse.sln (after adding/removing source files or modules)
-"<Engine>ngineBuildBatchFilesBuild.bat" -projectfiles -project="<repo>AstroVerse.uproject" -game -rocket -progress
+"<Engine>\Engine\Build\BatchFiles\Build.bat" -projectfiles -project="<repo>\AstroVerse.uproject" -game -rocket -progress
 
 # Compile the editor target
-"<Engine>ngineBuildBatchFilesBuild.bat" AstroVerseEditor Win64 Development -project="<repo>AstroVerse.uproject" -waitmutex
+"<Engine>\Engine\Build\BatchFiles\Build.bat" AstroVerseEditor Win64 Development -project="<repo>\AstroVerse.uproject" -waitmutex
 
 # Run AstroCore automation tests headless (results in Saved/Logs/Tests.log)
-"<Engine>ngineBinariesWin64NREALEDITOR-CMD.EXE" "<repo>AstroVerse.uproject" -nullrhi -unattended -nosplash -nopause -ExecCmds="Automation RunTests AstroVerse.Core; Quit" -TestExit="Automation Test Queue Empty" -log=Tests.log
+"<Engine>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "<repo>\AstroVerse.uproject" -nullrhi -unattended -nosplash -nopause -ExecCmds="Automation RunTests AstroVerse.Core; Quit" -TestExit="Automation Test Queue Empty" -log=Tests.log
 ```
 
 OpenXR "failed to find active runtime" errors in headless runs are expected when no headset runtime is installed.
