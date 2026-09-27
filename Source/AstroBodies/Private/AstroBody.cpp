@@ -153,3 +153,12 @@ void AAstroBody::UpdateSunDirection()
     const FVector Direction = UAstroSimulationSubsystem::SimToEngineDirection(ToStar.Normalized());
     SurfaceMaterial->SetVectorParameterValue(TEXT("SunDirection"), FLinearColor(Direction.X, Direction.Y, Direction.Z, 0.0f));
 }
+
+void AAstroBody::SetHighDetail(bool bInHighDetail)
+{
+    if (bHighDetail != bInHighDetail)
+    {
+        bHighDetail = bInHighDetail;
+        OnDetailChanged(bHighDetail);
+    }
+}

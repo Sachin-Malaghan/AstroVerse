@@ -51,16 +51,23 @@ public:
     // Latest scaled-space factor (1 = drawn at true offset and size).
     double GetRenderScaleFactor() const { return RenderScaleFactor; }
 
+    // Set by AstroActivation: false for Dormant, true for Ambient/Active. Subclasses and
+    // AstroRendering components scale their cost off this.
+    void SetHighDetail(bool bInHighDetail);
+    bool IsHighDetail() const { return bHighDetail; }
+
     virtual void Tick(float DeltaSeconds) override;
 
 protected:
     // Hook for subclasses once they know their definition (rings, lights, materials).
     virtual void OnBoundToDefinition(const FBodyDefinition& Definition) {}
     virtual void OnRenderTransformUpdated(double ScaleFactor) {}
+    virtual void OnDetailChanged(bool bInHighDetail) {}
 
     TWeakObjectPtr<UAstroSimulationSubsystem> Simulation;
     int32 BodyIndex = INDEX_NONE;
     double RenderScaleFactor = 1.0;
+    bool bHighDetail = false;
 
 private:
     // Validation-only orbit trail (astro.Debug.Trails): parent-relative sim positions.

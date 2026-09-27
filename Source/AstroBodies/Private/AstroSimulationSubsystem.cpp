@@ -109,8 +109,22 @@ void UAstroSimulationSubsystem::UpdateStepSize()
     // requires. Depends on the time scale, never the frame rate.
     const double SimPerRealSecond = TimeController.IsValid() ? FMath::Abs(TimeController->GetTimeScale()) : 1.0;
     const double Required = SimPerRealSecond / StepsPerRealSecondBudget;
+
+    // N-body moons cap the step so their orbits stay resolved.
+    double Cap = MaxStepSeconds;
+    for (int32 i = 0; i < Registry.Num(); ++i)
+    {
+        if (Registry.Get(i).BodyType == EAstroBodyType::Moon && Simulation.DoesBodyUseNBody(i))
+        {
+            Cap = FMath::Min(Cap, KeplerOrbit::OrbitalPeriod(Registry.Get(i).Elements, Registry.GetOrbitMu(i)) / MinStepsPerMoonOrbit);
+        }
+    }
     double Step = BaseStepSeconds;
-    while (Step < Required && Step * 2.0 <= MaxStepSeconds)
+    while (Step > Cap && Step > 1.0)
+    {
+        Step *= 0.5;
+    }
+    while (Step < Required && Step * 2.0 <= Cap)
     {
         Step *= 2.0;
     }
@@ -289,4 +303,25 @@ double UAstroSimulationSubsystem::GetDistanceBetweenBodiesKm(FName A, FName B) c
         return 0.0;
     }
     return (Simulation.GetBodyState(IA).Position - Simulation.GetBodyState(IB).Position).Length() / 1000.0;
+}
+
+bool UAstroSimulationSubsystem::CanResolveMoonInNBody(int32 MoonIndex) const
+{
+    if (!bReady || !Registry.GetAll().IsValidIndex(MoonIndex))
+    {
+        return false;
+    }
+    const double Period = KeplerOrbit::OrbitalPeriod(Registry.Get(MoonIndex).Elements, Registry.GetOrbitMu(MoonIndex));
+    const double SimPerRealSecond = TimeController.IsValid() ? FMath::Abs(TimeController->GetTimeScale()) : 1.0;
+    return SimPerRealSecond * MinStepsPerMoonOrbit / Period <= StepsPerRealSecondBudget;
+}
+
+void UAstroSimulationSubsystem::SetMoonUsesNBody(int32 MoonIndex, bool bUseNBody)
+{
+    if (!bReady || Simulation.DoesBodyUseNBody(MoonIndex) == bUseNBody)
+    {
+        return;
+    }
+    Simulation.SetMoonUsesNBody(MoonIndex, bUseNBody);
+    UpdateStepSize();
 }

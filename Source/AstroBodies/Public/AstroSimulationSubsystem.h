@@ -59,6 +59,13 @@ public:
 
     double GetLinearRenderLimitMeters() const { return LinearRenderLimitMeters; }
 
+    // True if a moon's orbit can be integrated at >= MinStepsPerMoonOrbit steps per orbit
+    // within the per-second step budget at the current time scale.
+    bool CanResolveMoonInNBody(int32 MoonIndex) const;
+    // Promote/demote a moon and immediately re-fit the step size so its orbit is never under-resolved.
+    void SetMoonUsesNBody(int32 MoonIndex, bool bUseNBody);
+    static constexpr double MinStepsPerMoonOrbit = 100.0;
+
     FOnAstroSimulationAdvanced OnSimulationAdvanced;
 
     // Blueprint-facing helpers.

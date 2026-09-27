@@ -21,6 +21,7 @@ Launcher engine builds do not ship `GenerateProjectFiles.bat`; drive UnrealBuild
 # Compile the editor target
 "<Engine>\Engine\Build\BatchFiles\Build.bat" AstroVerseEditor Win64 Development -project="<repo>\AstroVerse.uproject" -waitmutex
 
+# (or: powershell -ExecutionPolicy Bypass -File ToolsValidationun_tests.ps1   -- prints a pass/fail summary)
 # Run all AstroVerse automation tests headless (results in Saved/Logs/Tests.log)
 "<Engine>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "<repo>\AstroVerse.uproject" -nullrhi -unattended -nosplash -nopause -ExecCmds="Automation RunTests AstroVerse; Quit" -TestExit="Automation Test Queue Empty" -log=Tests.log
 ```
@@ -90,7 +91,7 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - [x] **Phase 2 — AstroBodies.** Implement `FBodyRegistry::LoadFromDataTables`; author `DT_Planets.csv` with real masses/radii/orbital elements for the Sun + 8 planets; wire `ACelestialBody::Tick` to read integrator output.
 - [x] **Phase 3 — AstroTime.** Implement `UTimeController` play/pause/rewind/timescale; confirm every Phase 1-2 class reads time from here, not `GetWorld()`.
 - [x] **Phase 4 — Minimal proof-of-motion scene.** Placeholder spheres orbiting correctly in `L_SolarSystem`, no art pass yet — this validates the physics visually before any rendering investment.
-- [ ] **Phase 5 — AstroActivation.** Implement `FActivationManager` tier promotion/demotion, the 3-lock cap with demotion-of-oldest, reference-frame handling.
+- [x] **Phase 5 — AstroActivation.** Implement `FActivationManager` tier promotion/demotion, the 3-lock cap with demotion-of-oldest, reference-frame handling.
 - [ ] **Phase 6 — AstroRendering.** Corona/flare, atmospheric scattering, ring shaders; split Lumen/Nanite budgets per platform (desktop full, VR trimmed for 90Hz).
 - [ ] **Phase 7 — Scale and precision infrastructure.** Confirm floating-origin behavior at true scale; build the Solar-System ↔ Galaxy scale-domain transition.
 - [ ] **Phase 8 — AstroInput + AstroApp pawns.** Desktop flycam pawn first, then VR pawn with room-scale/teleport locomotion.
