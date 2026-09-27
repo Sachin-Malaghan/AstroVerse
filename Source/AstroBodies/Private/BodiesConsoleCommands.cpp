@@ -24,6 +24,7 @@ namespace
                 Offset = FAstroVector3d(FCString::Atod(*Args[1]), FCString::Atod(*Args[2]), FCString::Atod(*Args[3])) * 1000.0;
             }
             Sim->SetRenderOriginAnchor(Body, Offset);
+            Sim->OnViewerPlaced.Broadcast();
         }));
 
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdOriginSet(
@@ -35,6 +36,7 @@ namespace
             {
                 const FAstroVector3d AU(FCString::Atod(*Args[0]), FCString::Atod(*Args[1]), FCString::Atod(*Args[2]));
                 Sim->SetRenderOrigin(AU * AstroConstants::AstronomicalUnit);
+                Sim->OnViewerPlaced.Broadcast();
             }
         }));
 
@@ -65,6 +67,7 @@ namespace
                 R += Def.Terrain->HeightAt(Dir, 0.5);
             }
             Sim->SetRenderOriginBodyFixed(Body, Dir * (R + Altitude));
+            Sim->OnViewerPlaced.Broadcast();
         }));
 
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdBodiesList(

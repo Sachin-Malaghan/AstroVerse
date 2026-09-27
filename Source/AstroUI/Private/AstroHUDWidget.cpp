@@ -207,7 +207,7 @@ void UAstroHUDWidget::Build()
     HelpText->SetText(FText::FromString(TEXT(
         "WASD / Space / C  fly     Mouse  look     Q E  roll     Wheel  speed     Shift  boost\n"
         "F  orbit the selection (mouse circles, wheel or W / S zoom; F again: free flight)     Home  back to Earth if lost\n"
-        "Click  select (again: lock)     T  travel     G  land / take off     M  galaxy     V  Milky Way guide\n"
+        "Click  select (again: lock)     T  travel     G  land / take off     M  galaxy     V  Milky Way guide     U  face the Sun\n"
         "[ ]  time slower / faster     P  pause     R  rewind     L  live (real UTC)     F2  guided tour, N  next\n"
         "H  hide HUD     Esc  menu (sun at a site, settings)")));
     Place(Root, HelpText, FAnchors(0.0f, 1.0f), FVector2D(0.0f, 1.0f), FVector2D(20, -40));
@@ -277,11 +277,65 @@ void UAstroHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     UpdateTravel();
     UpdateSite();
     UpdateSkyGuide();
+    UpdateSunPointer();
     if (ToastRemaining > 0.0f)
     {
         ToastRemaining -= InDeltaTime;
         ToastText->SetRenderOpacity(FMath::Clamp(ToastRemaining, 0.0f, 1.0f));
     }
+}
+
+void UAstroHUDWidget::UpdateSunPointer()
+{
+    // Where is the Sun? From any planet it is either on screen (its marker says so) or this
+    // pointer sits at the screen edge in its direction, with distance and light travel time.
+    if (!SunPointer)
+    {
+        SunPointer = MakeText(14, FLinearColor(1.0f, 0.86f, 0.45f, 1.0f));
+        UCanvasPanelSlot* PointerSlot = SiteLabelLayer->AddChildToCanvas(SunPointer);
+        PointerSlot->SetAutoSize(true);
+        PointerSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+    }
+    const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    const UAstroScaleDomainSubsystem* Domains = UAstroScaleDomainSubsystem::Get(this);
+    APlayerController* PC = GetOwningPlayer();
+    if (bCompact || !Sim || !Sim->IsReady() || !PC || !PC->PlayerCameraManager || (Domains && Domains->GetDomain() == EAstroScaleDomain::Galaxy))
+    {
+        SunPointer->SetVisibility(ESlateVisibility::Collapsed);
+        return;
+    }
+    const int32 Star = Sim->GetRegistry().GetStarIndex();
+    const FVector CameraLoc = PC->PlayerCameraManager->GetCameraLocation();
+    const FAstroVector3d ToSun = Sim->GetSimulation().GetBodyState(Star).Position - Sim->EngineToSimPosition(CameraLoc);
+    const double Distance = ToSun.Length();
+    const FVector Dir = Sim->SimToEngineDirection(ToSun / Distance).GetSafeNormal();
+    const FVector Local = PC->PlayerCameraManager->GetCameraRotation().UnrotateVector(Dir); // X fwd, Y right, Z up
+    FVector2D ViewportSize = UWidgetLayoutLibrary::GetViewportSize(this);
+    const float Scale = UWidgetLayoutLibrary::GetViewportScale(this);
+    FVector2D Screen;
+    const bool bProjected = Local.X > 0.0 && PC->ProjectWorldLocationToScreen(CameraLoc + Dir * 1.0e7, Screen, false);
+    if (bProjected && Screen.X > 0 && Screen.Y > 0 && Screen.X < ViewportSize.X && Screen.Y < ViewportSize.Y)
+    {
+        SunPointer->SetVisibility(ESlateVisibility::Collapsed); // in view: the body marker labels it
+        return;
+    }
+    // Off screen: pin to an ellipse inside the viewport edge, in the Sun's screen direction.
+    FVector2D Towards(Local.Y, -Local.Z);
+    if (Towards.IsNearlyZero())
+    {
+        Towards = FVector2D(0.0, 1.0); // straight behind: point down
+    }
+    Towards.Normalize();
+    const FVector2D Half = ViewportSize / Scale * 0.5f;
+    const FVector2D Pos = Half + FVector2D(Towards.X * (Half.X - 150.0f), Towards.Y * (Half.Y - 60.0f));
+    const double LightSeconds = Distance / 299792458.0;
+    const FString Light = LightSeconds < 3600.0
+        ? FString::Printf(TEXT("%d min %02d s"), FMath::FloorToInt(LightSeconds / 60.0), FMath::FloorToInt(FMath::Fmod(LightSeconds, 60.0)))
+        : FString::Printf(TEXT("%d h %02d min"), FMath::FloorToInt(LightSeconds / 3600.0), FMath::FloorToInt(FMath::Fmod(LightSeconds, 3600.0) / 60.0));
+    const TCHAR* Arrow = FMath::Abs(Towards.X) > FMath::Abs(Towards.Y) ? (Towards.X > 0 ? TEXT(">>") : TEXT("<<")) : (Towards.Y > 0 ? TEXT("vv") : TEXT("^^"));
+    SunPointer->SetText(FText::FromString(FString::Printf(TEXT("%s  Sun  %s  (light %s)   U to face it"), Arrow, *AstroUIFormat::Distance(Distance), *Light)));
+    Cast<UCanvasPanelSlot>(SunPointer->Slot)->SetPosition(Pos);
+    SunPointer->SetVisibility(ESlateVisibility::HitTestInvisible);
 }
 
 void UAstroHUDWidget::UpdateSkyGuide()

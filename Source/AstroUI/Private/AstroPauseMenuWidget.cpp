@@ -16,6 +16,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Styling/CoreStyle.h"
 #include "TravelSystem.h"
+#include "AstroSpaceEnvironment.h"
 
 namespace
 {
@@ -98,6 +99,9 @@ void UAstroPauseMenuWidget::Build()
     AddButton(Box, TEXT(""), &Clock)->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnClockClicked);
     StyleLabel = Style;
     ClockLabel = Clock;
+    UTextBlock* Sky = nullptr;
+    AddButton(Box, TEXT(""), &Sky)->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnSkyClicked);
+    SkyLabel = Sky;
     AddButton(Box, TEXT("Exposure  +"))->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnBrighterClicked);
     ExposureLabel = NewText(WidgetTree, 14, FLinearColor(0.62f, 0.68f, 0.78f, 1.0f));
     Box->AddChildToVerticalBox(ExposureLabel)->SetHorizontalAlignment(HAlign_Center);
@@ -123,6 +127,8 @@ void UAstroPauseMenuWidget::Refresh()
     const UAstroTravelSettings* Settings = UAstroTravelSettings::Get();
     StyleLabel->SetText(FText::FromString(Settings->Style == EAstroTravelStyle::PilotedShip ? TEXT("Travel:  Piloted ship") : TEXT("Travel:  Cinematic warp")));
     ClockLabel->SetText(FText::FromString(Settings->Clock == EAstroClockDuringTravel::Pause ? TEXT("Clock during travel:  Paused") : TEXT("Clock during travel:  Keeps running")));
+    SkyLabel->SetText(FText::FromString(AAstroSpaceEnvironment::GetMilkyWayMode() != 0
+        ? TEXT("Milky Way:  Enhanced (easy to see)") : TEXT("Milky Way:  Realistic (as photographed)")));
     float Exposure = 0.0f;
     if (IConsoleVariable* CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("astro.Render.ExposureCompensation")))
     {
@@ -186,6 +192,12 @@ UEditableTextBox* UAstroPauseMenuWidget::AddField(UHorizontalBox* Row, const FSt
     Size.Value = Width; // relative share of the row
     FieldSlot->SetSize(Size);
     return Field;
+}
+
+void UAstroPauseMenuWidget::OnSkyClicked()
+{
+    AAstroSpaceEnvironment::SetMilkyWayMode(AAstroSpaceEnvironment::GetMilkyWayMode() != 0 ? 0 : 1);
+    Refresh();
 }
 
 void UAstroPauseMenuWidget::OnTourClicked()

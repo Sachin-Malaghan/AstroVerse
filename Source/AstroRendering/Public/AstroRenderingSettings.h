@@ -69,6 +69,19 @@ public:
     UPROPERTY(Config, EditAnywhere, Category = "Exposure")
     double StarDisplayBrightness = 0.35;
 
+    // "Enhanced" sky (astro.Sky.MilkyWay 1, the default): the photographed band is ~1% of
+    // white - invisible at the exposure a sunlit planet needs - so a procedural band in
+    // galactic coordinates (bulge, Great Rift, star clouds) is drawn behind the map's stars.
+    // Only empty sky is affected; bodies, the Sun and exposure are untouched.
+    UPROPERTY(Config, EditAnywhere, Category = "Exposure")
+    double EnhancedBandStrength = 0.26;
+
+    UPROPERTY(Config, EditAnywhere, Category = "Exposure")
+    double EnhancedStarGain = 1.4;
+
+    UPROPERTY(Config, EditAnywhere, Category = "Exposure")
+    double EnhancedStarDisplayBrightness = 1.0;
+
     // --- Per-platform render budgets, applied at begin play. "cvar=value" entries.
     UPROPERTY(Config, EditAnywhere, Category = "Budgets")
     TArray<FString> DesktopCVars;

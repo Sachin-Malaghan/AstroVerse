@@ -37,6 +37,7 @@ namespace
         if (AAstroPawnBase* Pawn = Cast<AAstroPawnBase>(Actor))
         {
             Pawn->StopMotion();
+            Pawn->StopOrbiting(); // an explicit camera placement wins over the orbit camera
         }
     }
 
@@ -284,6 +285,14 @@ namespace
         {
             AAstroPawnBase* Pawn = World && World->GetFirstPlayerController() ? Cast<AAstroPawnBase>(World->GetFirstPlayerController()->GetPawn()) : nullptr;
             if (Pawn && Args.Num() > 0) { Pawn->FocusOn(FName(*Args[0]), Args.Num() > 1 ? FCString::Atod(*Args[1]) : 0.0, false); }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdFace(
+        TEXT("astro.Face"), TEXT("astro.Face <BodyID> - turn smoothly to look at a body (U = the Sun)"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            AAstroPawnBase* Pawn = World && World->GetFirstPlayerController() ? Cast<AAstroPawnBase>(World->GetFirstPlayerController()->GetPawn()) : nullptr;
+            if (Pawn && Args.Num() > 0) { Pawn->FaceBody(FName(*Args[0])); }
         }));
 
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdUIToggle(

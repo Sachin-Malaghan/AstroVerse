@@ -13,6 +13,8 @@ class AAstroBody;
 class UTimeController;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnAstroSimulationAdvanced, double /*SimSeconds*/);
+// A dev / scripted command put the viewer somewhere explicitly (camera modes should yield).
+DECLARE_MULTICAST_DELEGATE(FOnAstroViewerPlaced);
 
 UCLASS()
 class ASTROBODIES_API UAstroSimulationSubsystem : public UWorldSubsystem
@@ -42,6 +44,8 @@ public:
     void SetRenderOriginAnchor(int32 BodyIndex, const FAstroVector3d& OffsetFromBodyMeters);
     // Offset is in the body-fixed frame; engine axes become local east / south / up at that point.
     void SetRenderOriginBodyFixed(int32 BodyIndex, const FAstroVector3d& OffsetBodyFixedMeters);
+
+    FOnAstroViewerPlaced OnViewerPlaced;
     // Switches to the body's rotating frame without moving the origin (e.g. on touchdown).
     void ConvertAnchorToBodyFixed(int32 BodyIndex);
     void ClearRenderOriginAnchor();

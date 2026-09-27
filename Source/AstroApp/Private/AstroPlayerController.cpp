@@ -193,6 +193,7 @@ void AAstroPlayerController::SetupInputComponent()
         EIC->BindAction(InputActions->Tour, ETriggerEvent::Started, this, &AAstroPlayerController::OnTourAction);
         EIC->BindAction(InputActions->TourNext, ETriggerEvent::Started, this, &AAstroPlayerController::OnTourNextAction);
         EIC->BindAction(InputActions->MilkyWayGuide, ETriggerEvent::Started, this, &AAstroPlayerController::OnMilkyWayGuideAction);
+        EIC->BindAction(InputActions->FaceSun, ETriggerEvent::Started, this, &AAstroPlayerController::OnFaceSunAction);
     }
 }
 
@@ -373,6 +374,15 @@ void AAstroPlayerController::OnMilkyWayGuideAction(const FInputActionValue& Valu
             UI->ShowToast(bOn ? TEXT("Milky Way guide on: the band is our galaxy's disc seen edge-on from inside.  V to hide.")
                               : TEXT("Milky Way guide off."));
         }
+    }
+}
+
+void AAstroPlayerController::OnFaceSunAction(const FInputActionValue& Value)
+{
+    const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    if (AAstroPawnBase* Viewer = Cast<AAstroPawnBase>(GetPawn()); Viewer && Sim && Sim->IsReady())
+    {
+        Viewer->FaceBody(Sim->GetRegistry().Get(Sim->GetRegistry().GetStarIndex()).BodyID);
     }
 }
 

@@ -26,6 +26,9 @@ public:
     void GetGalacticAxes(FAstroVector3d& OutX, FAstroVector3d& OutY, FAstroVector3d& OutZ) const { OutX = GalacticX; OutY = GalacticY; OutZ = GalacticZ; }
     // Milky Way guide (V): brighter band plus labels, for teaching.
     static bool IsMilkyWayGuideOn();
+    // Sky rendering: 0 = realistic (as photographed), 1 = enhanced Milky Way (default).
+    static int32 GetMilkyWayMode();
+    static void SetMilkyWayMode(int32 Mode);
 
     AAstroSpaceEnvironment();
 

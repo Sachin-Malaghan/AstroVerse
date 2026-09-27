@@ -141,7 +141,9 @@ VR stays built but is parked for later (user decision); the work below is deskto
 - Earth at 3.7 km is regional, not plot-level; a site's ground height is right to tens of metres on plains. Finer local DEMs (SRTM 30 m tiles) drop in the same way if needed.
 
 ### Milky Way in the sky
-- The sky map is the real Milky Way panorama placed in galactic coordinates, so from any planet or site the band sits where it really is and turns with the body. `V` (`astro.Sky.MilkyWayGuide`) brightens it and labels the galactic centre, anticentre, the Sun's direction of motion and the galactic plane.
+- The sky is placed in galactic coordinates, so from any planet or site the band sits where it really is and turns with the body. Two renditions (pause menu, `astro.Sky.MilkyWay 0|1`): **Enhanced** (default) draws the map's stars plus a smooth procedural band - bulge toward Sagittarius, Great Rift dust, star clouds, warm core / violet-blue haze, styled like a long-exposure photo - because the photographed band is ~1% of white and can't be stretched (8-bit JPEG blotches). **Realistic** shows the photograph as is. Only empty sky is touched; bodies, the Sun and exposure are unchanged, and a sunlit sky still washes it out on a planet by day.
+- `V` (`astro.Sky.MilkyWayGuide`) adds labels: galactic centre, anticentre, the Sun's direction of motion, the galactic plane.
+- The Sun from anywhere: off screen, a HUD pointer shows its direction, distance and light travel time; `U` (`astro.Face <Body>`) turns to face it.
 - Far away, the Sun becomes a flux-conserving point source (corona shader `PointSigma`) so it stays the brightest point in the sky from beyond Neptune.
 
 ## Decided — travel (Phase 9, decided 2026-09-27)

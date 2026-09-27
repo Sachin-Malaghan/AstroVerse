@@ -36,6 +36,10 @@ void AAstroPawnBase::BeginPlay()
     {
         Tour->OnCameraRequest.AddUObject(this, &AAstroPawnBase::HandleTourCamera);
     }
+    if (UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this))
+    {
+        Sim->OnViewerPlaced.AddWeakLambda(this, [this]() { bOrbiting = false; FaceTarget = INDEX_NONE; });
+    }
 }
 
 void AAstroPawnBase::HandleTourCamera(FName BodyID, double DistanceRadii, double PhaseDeg, double ElevationDeg, double DriftDegPerSecond, bool bUseSide)
@@ -162,6 +166,59 @@ void AAstroPawnBase::FocusOnFromSunSide(FName BodyID, double DistanceRadii, doub
         TeleportToSim(BodyPos + Dir * (Sim->EngineToSimPosition(GetActorLocation()) - BodyPos).Length(), GetActorQuat());
     }
     FocusOn(BodyID, DistanceRadii, bInstant);
+}
+
+void AAstroPawnBase::FaceBody(FName BodyID)
+{
+    const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    FaceTarget = Sim && Sim->IsReady() ? Sim->FindBodyIndex(BodyID) : INDEX_NONE;
+    FaceSeconds = 0.0;
+    if (FaceTarget != INDEX_NONE)
+    {
+        bOrbiting = false;
+    }
+}
+
+bool AAstroPawnBase::ApplyFaceTarget(UAstroSimulationSubsystem* Sim, float DeltaSeconds)
+{
+    if (FaceTarget == INDEX_NONE)
+    {
+        return false;
+    }
+    FaceSeconds += DeltaSeconds;
+    if (!Input.LookAccum.IsNearlyZero() || FaceSeconds > 3.0)
+    {
+        FaceTarget = INDEX_NONE; // the user took over, or we're there
+        return false;
+    }
+    const FVector Dir = Sim->SimToEngineDirection((Sim->GetSimulation().GetBodyState(FaceTarget).Position - Sim->EngineToSimPosition(GetActorLocation())).Normalized()).GetSafeNormal();
+    const double Ease = 1.0 - FMath::Exp(-4.0 * DeltaSeconds);
+    if (Locomotion == EAstroLocomotion::Walking)
+    {
+        FVector Up;
+        double Height, Gravity;
+        if (!SampleGround(Sim, Up, Height, Gravity))
+        {
+            return false;
+        }
+        const FBodyDefinition& Body = Sim->GetRegistry().Get(ReferenceBody);
+        const FVector Pole = Sim->SimToEngineDirection(Body.GetOrientationAt(Sim->GetSimulation().GetSimSeconds()).GetColumn(2));
+        const FVector North = (Pole - Up * FVector::DotProduct(Pole, Up)).GetSafeNormal();
+        const FVector Flat = (Dir - Up * FVector::DotProduct(Dir, Up)).GetSafeNormal();
+        if (!North.IsNearlyZero() && !Flat.IsNearlyZero())
+        {
+            // Same convention as ToggleLanding / TickWalking.
+            const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(FVector::DotProduct(Up, FVector::CrossProduct(North, Flat)), FVector::DotProduct(North, Flat)));
+            WalkYaw += FMath::FindDeltaAngleDegrees(WalkYaw, Yaw) * Ease;
+        }
+        const double Pitch = FMath::Clamp(FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(FVector::DotProduct(Dir, Up), -1.0, 1.0))), -89.0, 89.0);
+        WalkPitch += (Pitch - WalkPitch) * Ease;
+        return false; // TickWalking applies yaw/pitch
+    }
+    const FVector CurrentUp = GetActorUpVector();
+    const FQuat Target = FRotationMatrix::MakeFromXZ(Dir, CurrentUp).ToQuat();
+    SetActorRotation(FQuat::Slerp(GetActorQuat(), Target, Ease));
+    return true;
 }
 
 void AAstroPawnBase::GoHome()
@@ -348,6 +405,7 @@ void AAstroPawnBase::Tick(float DeltaSeconds)
     }
     else if (Locomotion == EAstroLocomotion::Walking)
     {
+        ApplyFaceTarget(Sim, DeltaSeconds);
         TickWalking(Sim, DeltaSeconds);
     }
     else
@@ -471,7 +529,10 @@ void AAstroPawnBase::ApplyLookInput(float DeltaSeconds)
 
 void AAstroPawnBase::TickFlying(UAstroSimulationSubsystem* Sim, float DeltaSeconds)
 {
-    ApplyLookInput(DeltaSeconds);
+    if (!ApplyFaceTarget(Sim, DeltaSeconds))
+    {
+        ApplyLookInput(DeltaSeconds);
+    }
 
     const float Steps = Input.ConsumeSpeedSteps();
     SpeedMultiplier = FMath::Clamp(SpeedMultiplier * FMath::Pow(1.25, Steps), 1e-3, 1e3);

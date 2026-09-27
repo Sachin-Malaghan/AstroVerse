@@ -50,6 +50,8 @@ public:
     UPROPERTY() TObjectPtr<UInputAction> TourNext;
     // Milky Way guide (V).
     UPROPERTY() TObjectPtr<UInputAction> MilkyWayGuide;
+    // Turn to face the Sun (U).
+    UPROPERTY() TObjectPtr<UInputAction> FaceSun;
 
     UPROPERTY() TObjectPtr<UInputMappingContext> DesktopContext;
     UPROPERTY() TObjectPtr<UInputMappingContext> VRContext;

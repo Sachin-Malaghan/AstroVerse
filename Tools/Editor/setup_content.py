@@ -459,6 +459,8 @@ def build_star_field():
         "GalZ": g.vector("GalZ", (0, 0, 1, 0)),
         "StarTex": g.texture("StarTex", BLACK),
         "StarNits": g.scalar("StarNits", 1.0),
+        "BandStrength": g.scalar("BandStrength", 0.0),
+        "StarGain": g.scalar("StarGain", 1.0),
     }
     c = g.custom("StarField.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT3)
     g.wire(c, inputs)

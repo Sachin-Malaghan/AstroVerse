@@ -20,6 +20,19 @@
 static TAutoConsoleVariable<int32> CVarAstroMilkyWayGuide(
     TEXT("astro.Sky.MilkyWayGuide"), 0, TEXT("1 = brighter Milky Way band with labels (galactic centre, plane, the Sun's direction of motion)."));
 
+static TAutoConsoleVariable<int32> CVarAstroMilkyWayMode(
+    TEXT("astro.Sky.MilkyWay"), 1, TEXT("Sky: 0 = realistic (as photographed), 1 = enhanced Milky Way band (default)."));
+
+int32 AAstroSpaceEnvironment::GetMilkyWayMode()
+{
+    return CVarAstroMilkyWayMode.GetValueOnGameThread();
+}
+
+void AAstroSpaceEnvironment::SetMilkyWayMode(int32 Mode)
+{
+    CVarAstroMilkyWayMode->Set(Mode, ECVF_SetByCode);
+}
+
 bool AAstroSpaceEnvironment::IsMilkyWayGuideOn()
 {
     return CVarAstroMilkyWayGuide.GetValueOnGameThread() != 0;
@@ -164,8 +177,12 @@ void AAstroSpaceEnvironment::Tick(float DeltaSeconds)
 
         // Display-referred brightness converted back to scene luminance at this exposure.
         // ...and a sunlit sky overhead washes them out.
-        const double Guide = IsMilkyWayGuideOn() ? 6.0 : 1.0; // teaching mode: make the band pop
-        const double StarNits = Guide * Settings->StarDisplayBrightness * 1.2 * FMath::Pow(2.0, CurrentEV100) * (1.0 - 0.995 * Daylight);
+        const bool bEnhanced = GetMilkyWayMode() != 0;
+        const double Guide = IsMilkyWayGuideOn() ? 1.3 : 1.0; // teaching mode: brighter still
+        const double Display = bEnhanced ? Settings->EnhancedStarDisplayBrightness : Settings->StarDisplayBrightness;
+        const double StarNits = Guide * Display * 1.2 * FMath::Pow(2.0, CurrentEV100) * (1.0 - 0.995 * Daylight);
+        StarFieldMID->SetScalarParameterValue(TEXT("BandStrength"), static_cast<float>(bEnhanced ? Settings->EnhancedBandStrength : 0.0));
+        StarFieldMID->SetScalarParameterValue(TEXT("StarGain"), static_cast<float>(bEnhanced ? Settings->EnhancedStarGain : 1.0));
         StarFieldMID->SetScalarParameterValue(TEXT("StarNits"), static_cast<float>(StarNits));
     }
 

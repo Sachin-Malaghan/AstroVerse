@@ -72,6 +72,7 @@ UAstroInputActions* UAstroInputActions::Create(UObject* Outer)
     A->Tour = MakeAction(A, TEXT("IA_Tour"), EInputActionValueType::Boolean);
     A->TourNext = MakeAction(A, TEXT("IA_TourNext"), EInputActionValueType::Boolean);
     A->MilkyWayGuide = MakeAction(A, TEXT("IA_MilkyWayGuide"), EInputActionValueType::Boolean);
+    A->FaceSun = MakeAction(A, TEXT("IA_FaceSun"), EInputActionValueType::Boolean);
 
     A->DesktopContext = NewObject<UInputMappingContext>(A, TEXT("IMC_Desktop"));
     A->VRContext = NewObject<UInputMappingContext>(A, TEXT("IMC_VR"));
@@ -176,5 +177,6 @@ void UAstroInputActions::BuildGlobal()
     Map(C, Tour, EKeys::F2);
     Map(C, TourNext, EKeys::N);
     Map(C, MilkyWayGuide, EKeys::V);
+    Map(C, FaceSun, EKeys::U);
     Map(C, Menu, EKeys::Gamepad_Special_Right);
 }

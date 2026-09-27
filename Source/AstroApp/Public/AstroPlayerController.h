@@ -72,6 +72,7 @@ private:
     void OnTourAction(const FInputActionValue& Value);
     void OnTourNextAction(const FInputActionValue& Value);
     void OnMilkyWayGuideAction(const FInputActionValue& Value);
+    void OnFaceSunAction(const FInputActionValue& Value);
     void HandleUICommand(FName Command);
     void FinishGoToSite();
     struct FPendingSite { FName Body; double Lat = 0, Lon = 0, Zone = 0; FString Name; };

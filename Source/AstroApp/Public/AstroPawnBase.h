@@ -76,6 +76,9 @@ public:
     void SetOrbitDrift(double DegPerSecond) { OrbitDriftDegPerSecond = DegPerSecond; }
     // Reset: back to the solar system and the home view. Works from the galaxy and mid-flight.
     void GoHome();
+    // Turn smoothly to look at a body (U = the Sun). Leaves orbit; walking keeps you upright.
+    // Any mouse look cancels the turn.
+    void FaceBody(FName BodyID);
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Astro|Pawn")
     FName HomeBody = TEXT("Earth");
@@ -160,4 +163,9 @@ private:
     double OrbitLastSimSeconds = 0.0;
     double OrbitDriftDegPerSecond = 0.0;
     FQuat OrbitView = FQuat::Identity;
+
+    // FaceBody state.
+    int32 FaceTarget = INDEX_NONE;
+    double FaceSeconds = 0.0;
+    bool ApplyFaceTarget(UAstroSimulationSubsystem* Sim, float DeltaSeconds);
 };

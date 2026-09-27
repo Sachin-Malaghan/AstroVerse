@@ -48,6 +48,7 @@ private:
     void UpdateTravel();
     void UpdateSite();
     void UpdateSkyGuide();
+    void UpdateSunPointer();
     UTextBlock* MakeText(int32 Size, const FLinearColor& Color = FLinearColor(0.92f, 0.94f, 1.0f, 1.0f));
     UButton* MakeButton(const FString& Label, UTextBlock*& OutLabel);
 
@@ -71,6 +72,7 @@ private:
     UPROPERTY() TObjectPtr<UCanvasPanel> SiteLabelLayer;
     UPROPERTY() TArray<TObjectPtr<UTextBlock>> SiteLabels;
     UPROPERTY() TArray<TObjectPtr<UTextBlock>> SkyLabels;
+    UPROPERTY() TObjectPtr<UTextBlock> SunPointer;
     UPROPERTY() TObjectPtr<UBorder> CaptionPanel;
     UPROPERTY() TObjectPtr<UTextBlock> CaptionTitle;
     UPROPERTY() TObjectPtr<UTextBlock> CaptionText;
