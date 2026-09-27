@@ -20,16 +20,46 @@ void UAstroFloatingOriginComponent::TickComponent(float DeltaTime, ELevelTick Ti
     }
 }
 
+namespace
+{
+    TFunction<void(const FVector&)>& RebaseOverride()
+    {
+        static TFunction<void(const FVector&)> Handler;
+        return Handler;
+    }
+}
+
+void UAstroFloatingOriginComponent::SetRebaseOverride(TFunction<void(const FVector&)> Handler)
+{
+    RebaseOverride() = MoveTemp(Handler);
+}
+
+void UAstroFloatingOriginComponent::ClearRebaseOverride()
+{
+    RebaseOverride() = nullptr;
+}
+
 void UAstroFloatingOriginComponent::RebaseNow()
 {
     AActor* Owner = GetOwner();
-    UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
-    if (!Owner || !Sim || !Sim->IsReady())
+    if (!Owner)
     {
         return;
     }
     const FVector Offset = Owner->GetActorLocation();
-    Sim->ShiftRenderOrigin(Offset);
+    if (RebaseOverride())
+    {
+        RebaseOverride()(Offset);
+    }
+    else
+    {
+        UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+        if (!Sim || !Sim->IsReady())
+        {
+            return;
+        }
+        Sim->ShiftRenderOrigin(Offset);
+    }
     // Velocity and rotation are untouched; only the engine-space position is re-centered.
     Owner->SetActorLocation(FVector::ZeroVector, false, nullptr, ETeleportType::TeleportPhysics);
     ++RebaseCount;

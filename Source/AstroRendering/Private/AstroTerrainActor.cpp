@@ -29,6 +29,8 @@ namespace
 
 AAstroTerrainActor::AAstroTerrainActor()
 {
+    // Solar-system presentation: hidden while the galaxy scale-domain is shown.
+    Tags.Add(TEXT("AstroSolarSystem"));
     PrimaryActorTick.bCanEverTick = true;
     PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 

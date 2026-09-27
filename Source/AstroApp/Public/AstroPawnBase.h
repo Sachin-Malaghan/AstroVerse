@@ -15,6 +15,7 @@
 class UAstroFloatingOriginComponent;
 class UAstroSimulationSubsystem;
 class UInputAction;
+class FGalaxyView;
 struct FInputActionValue;
 
 UENUM(BlueprintType)
@@ -115,6 +116,7 @@ private:
     void SwitchFrame(UAstroSimulationSubsystem* Sim, TFunctionRef<void()> Change);
     void TickFlying(UAstroSimulationSubsystem* Sim, float DeltaSeconds);
     void TickWalking(UAstroSimulationSubsystem* Sim, float DeltaSeconds);
+    void TickGalaxyFlight(const FGalaxyView& Galaxy, float DeltaSeconds);
     // Local up at the pawn (engine space) and height above the terrain there.
     bool SampleGround(const UAstroSimulationSubsystem* Sim, FVector& OutUp, double& OutHeightAboveGround, double& OutGravity) const;
     double SphereOfInfluence(const UAstroSimulationSubsystem* Sim, int32 Body) const;

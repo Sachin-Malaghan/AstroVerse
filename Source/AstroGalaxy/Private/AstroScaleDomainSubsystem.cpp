@@ -6,8 +6,12 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "Components/PostProcessComponent.h"
+#include "EngineUtils.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAstroScaleDomain, Log, All);
+
+const FName UAstroScaleDomainSubsystem::SolarSystemTag(TEXT("AstroSolarSystem"));
 
 bool UAstroScaleDomainSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
@@ -33,6 +37,18 @@ void UAstroScaleDomainSubsystem::RequestDomain(EAstroScaleDomain Target)
         return;
     }
     PendingDomain = Target;
+    if (Domain == EAstroScaleDomain::Galaxy)
+    {
+        // Leaving the galaxy: dive back to the Sun first, then fade.
+        Phase = EPhase::Outro;
+        GalaxyView.BeginOutro(GetWorld(), [this]()
+        {
+            Phase = EPhase::FadingOut;
+            PhaseTime = 0.0f;
+            StartFade(0.0f, 1.0f);
+        });
+        return;
+    }
     Phase = EPhase::FadingOut;
     PhaseTime = 0.0f;
     StartFade(0.0f, 1.0f);
@@ -41,7 +57,8 @@ void UAstroScaleDomainSubsystem::RequestDomain(EAstroScaleDomain Target)
 void UAstroScaleDomainSubsystem::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
-    if (Phase == EPhase::Idle)
+    GalaxyView.Tick(GetWorld(), DeltaTime);
+    if (Phase == EPhase::Idle || Phase == EPhase::Outro)
     {
         return;
     }
@@ -83,6 +100,39 @@ void UAstroScaleDomainSubsystem::Switch()
 
 void UAstroScaleDomainSubsystem::SetSolarSystemVisible(bool bVisible)
 {
+    // Solar-system presentation actors (tagged by their modules). Only post-processes that
+    // were on when we left are turned back on (the warp effect, say, stays off).
+    for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+    {
+        if (It->ActorHasTag(SolarSystemTag))
+        {
+            It->SetActorHiddenInGame(!bVisible);
+            if (!bVisible)
+            {
+                TInlineComponentArray<UPostProcessComponent*> PostProcesses(*It);
+                for (UPostProcessComponent* PostProcess : PostProcesses)
+                {
+                    if (PostProcess->bEnabled)
+                    {
+                        PostProcess->bEnabled = false;
+                        SuspendedPostProcesses.Add(PostProcess);
+                    }
+                }
+            }
+        }
+    }
+    if (bVisible)
+    {
+        for (const TWeakObjectPtr<UPostProcessComponent>& PostProcess : SuspendedPostProcesses)
+        {
+            if (PostProcess.IsValid())
+            {
+                PostProcess->bEnabled = true;
+            }
+        }
+        SuspendedPostProcesses.Reset();
+    }
+
     // Hidden, not paused: the simulation keeps advancing so nothing pops on return.
     if (const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this))
     {

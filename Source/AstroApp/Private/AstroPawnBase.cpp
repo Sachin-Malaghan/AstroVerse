@@ -5,6 +5,7 @@
 #include "AstroPlayerController.h"
 #include "AstroSimulationSubsystem.h"
 #include "AstroTravelSubsystem.h"
+#include "AstroScaleDomainSubsystem.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "Math/AstroConstants.h"
@@ -80,6 +81,22 @@ void AAstroPawnBase::Tick(float DeltaSeconds)
         const FAstroVector3d Target = Sim->GetSimulation().GetBodyState(Sim->GetRenderOriginAnchorBody()).Position;
         SetActorRotation(Sim->SimToEngineDirection((Target - Sim->GetRenderOrigin()).Normalized()).Rotation());
         bFacedInitialBody = true;
+    }
+
+    // Galaxy scale-domain: its own units and camera moves; the solar-system frame is untouched.
+    if (UAstroScaleDomainSubsystem* Domains = UAstroScaleDomainSubsystem::Get(this))
+    {
+        if (Domains->IsTransitioning())
+        {
+            Input.ConsumeLook();
+            Velocity = FVector::ZeroVector;
+            return;
+        }
+        if (Domains->GetDomain() == EAstroScaleDomain::Galaxy)
+        {
+            TickGalaxyFlight(Domains->GetGalaxyView(), DeltaSeconds);
+            return;
+        }
     }
 
     // In transit the travel system flies the view; piloted ships take throttle and steering from us.
@@ -257,6 +274,19 @@ void AAstroPawnBase::TickFlying(UAstroSimulationSubsystem* Sim, float DeltaSecon
             SetActorRotation(FQuat::Slerp(Q, Level, 1.0 - FMath::Exp(-1.5 * DeltaSeconds)));
         }
     }
+}
+
+void AAstroPawnBase::TickGalaxyFlight(const FGalaxyView& Galaxy, float DeltaSeconds)
+{
+    ApplyLookInput(DeltaSeconds);
+    const float Steps = Input.ConsumeSpeedSteps();
+    SpeedMultiplier = FMath::Clamp(SpeedMultiplier * FMath::Pow(1.25, Steps), 1e-3, 1e3);
+    // Same feel as in the solar system: speed grows with distance to the nearest landmark.
+    const double SpeedCm = SpeedPerAltitude * SpeedMultiplier * Galaxy.GetFlightScaleCm(GetActorLocation()) * (Input.bBoost ? 10.0 : 1.0);
+    const FVector Target = GetMovementBasis().RotateVector(Input.MoveAxis.GetClampedToMaxSize(1.0)) * SpeedCm;
+    Velocity = FMath::Lerp(Velocity, Target, 1.0 - FMath::Exp(-6.0 * DeltaSeconds));
+    AddActorWorldOffset(Velocity * DeltaSeconds);
+    Locomotion = EAstroLocomotion::Flying;
 }
 
 void AAstroPawnBase::TickWalking(UAstroSimulationSubsystem* Sim, float DeltaSeconds)

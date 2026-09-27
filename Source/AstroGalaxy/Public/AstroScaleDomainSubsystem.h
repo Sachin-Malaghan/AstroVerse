@@ -36,8 +36,9 @@ public:
     UFUNCTION(BlueprintPure, Category = "Astro|ScaleDomain")
     EAstroScaleDomain GetDomain() const { return Domain; }
 
+    // True during fades and the galaxy intro/outro camera moves (pawns stand down).
     UFUNCTION(BlueprintPure, Category = "Astro|ScaleDomain")
-    bool IsTransitioning() const { return Phase != EPhase::Idle; }
+    bool IsTransitioning() const { return Phase != EPhase::Idle || GalaxyView.IsCameraMoveRunning(); }
 
     UPROPERTY(BlueprintAssignable, Category = "Astro|ScaleDomain")
     FOnScaleDomainChanged OnDomainChanged;
@@ -47,8 +48,12 @@ public:
 
     FGalaxyView& GetGalaxyView() { return GalaxyView; }
 
+    // Actors tagged with this are solar-system presentation (environment, terrain, effects):
+    // hidden, and their post-processes disabled, while the galaxy is shown.
+    static const FName SolarSystemTag;
+
 private:
-    enum class EPhase : uint8 { Idle, FadingOut, FadingIn };
+    enum class EPhase : uint8 { Idle, Outro, FadingOut, FadingIn };
 
     void Switch();
     void SetSolarSystemVisible(bool bVisible);
@@ -59,4 +64,5 @@ private:
     EPhase Phase = EPhase::Idle;
     float PhaseTime = 0.0f;
     FGalaxyView GalaxyView;
+    TArray<TWeakObjectPtr<class UPostProcessComponent>> SuspendedPostProcesses;
 };

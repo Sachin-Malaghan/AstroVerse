@@ -15,6 +15,8 @@ namespace
 
 AAstroWarpEffects::AAstroWarpEffects()
 {
+    // Solar-system presentation: hidden while the galaxy scale-domain is shown.
+    Tags.Add(TEXT("AstroSolarSystem"));
     PrimaryActorTick.bCanEverTick = false;
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 

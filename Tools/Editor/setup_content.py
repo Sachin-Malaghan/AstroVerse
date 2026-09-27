@@ -521,6 +521,36 @@ def build_warp_materials():
     log("Built warp materials")
 
 
+def build_galaxy_materials():
+    """Galaxy scale-domain (Phase 10): raymarched Milky Way volume and marker glow."""
+    m = fresh_material("M_GalaxyVolume")
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ALPHA_COMPOSITE)
+    m.set_editor_property("two_sided", True)
+    g = Graph(m)
+    to_kpc = g.vector("LocalToKpc", (0.5, -0.5, 0.06, 0))
+    inputs = {
+        "CamKpc": g.binary(unreal.MaterialExpressionMultiply, g.camera_local(), to_kpc),
+        "PixKpc": g.binary(unreal.MaterialExpressionMultiply, g.local_pos(), to_kpc),
+        "FaceSign": g.node(unreal.MaterialExpressionTwoSidedSign),
+        "CameraInside": g.scalar("CameraInside", 0.0),
+        "Brightness": g.scalar("Brightness", 0.8),
+        "HalfSize": g.vector("HalfSize", (25, 25, 3, 0)),
+    }
+    c = g.custom("GalaxyVolume.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT4)
+    g.wire(c, inputs)
+    MEL.connect_material_property(g.mask(c, True, True, True, False), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    MEL.connect_material_property(g.mask(c, False, False, False, True), "", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+
+    m = fresh_material("M_GalaxyMarker")
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    g = Graph(m)
+    MEL.connect_material_property(g.vector("Glow", (6.0, 4.6, 2.4, 1)), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+    log("Built galaxy materials")
+
+
 # ----------------------------------------------------------------------------- instances
 
 def instance(name, parent, scalars=None, vectors=None, textures=None):
@@ -603,6 +633,7 @@ sun = build_sun_surface()
 corona = build_corona()
 star_field = build_star_field()
 build_warp_materials()
+build_galaxy_materials()
 build_instances(surface, sun, rings, star_field)
 build_level()
 log("Done")

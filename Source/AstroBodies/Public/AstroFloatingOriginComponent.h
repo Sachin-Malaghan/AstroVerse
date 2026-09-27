@@ -24,6 +24,11 @@ public:
 
     int32 GetRebaseCount() const { return RebaseCount; }
 
+    // While set, rebases move whatever the override moves (the galaxy scale-domain) instead
+    // of the solar-system render origin. Offset is the engine-space distance the owner strayed.
+    static void SetRebaseOverride(TFunction<void(const FVector&)> Handler);
+    static void ClearRebaseOverride();
+
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 private:
