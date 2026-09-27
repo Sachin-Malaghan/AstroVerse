@@ -3,6 +3,7 @@
 #include "Planet.h"
 #include "Star.h"
 #include "AstroSimulationSubsystem.h"
+#include "Components/DirectionalLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 
 AStar::AStar()
@@ -10,6 +11,24 @@ AStar::AStar()
     // The Sun is the light source, not a lit surface; it never casts shadows onto itself.
     BodyMesh->SetCastShadow(false);
     BodyMesh->SetCollisionProfileName(TEXT("NoCollision"));
+
+    SunLight = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("SunLight"));
+    SunLight->SetupAttachment(BodyMesh);
+    SunLight->SetUsingAbsoluteRotation(true);
+    SunLight->SetUsingAbsoluteScale(true);
+    SunLight->SetMobility(EComponentMobility::Movable);
+    SunLight->SetIntensity(3.0f);
+    SunLight->SetAtmosphereSunLight(true);
+}
+
+void AStar::OnRenderTransformUpdated(double ScaleFactor)
+{
+    // Light travels from the star toward the render origin (the viewer).
+    const FVector ToOrigin = -GetActorLocation();
+    if (!ToOrigin.IsNearlyZero())
+    {
+        SunLight->SetWorldRotation(ToOrigin.Rotation());
+    }
 }
 
 void AStar::OnBoundToDefinition(const FBodyDefinition& Definition)

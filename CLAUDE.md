@@ -29,6 +29,8 @@ After adding or removing a `.cpp` file, regenerate project files before building
 
 OpenXR "failed to find active runtime" errors in headless runs are expected when no headset runtime is installed.
 
+Generated content (Data Table assets, placeholder materials, `L_SolarSystem`) is rebuilt by `Tools/Editor/setup_content.py` (run headless with `-run=pythonscript -script=...`). Visual validation: `Tools/Validation/capture_scenes.ps1` launches the game, captures screenshots to `Saved/Screenshots/WindowsEditor/`, and exits. Dev console commands live under `astro.*` (`astro.Time.*`, `astro.Origin.*`, `astro.Camera.*`, `astro.Debug.*`).
+
 ## Non-negotiable architecture rule
 
 Four layers, strictly one-directional dependency:
@@ -87,7 +89,7 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - [x] **Phase 1 — AstroCore.** Implement `FAstroVector3d` operators, `LeapfrogSolver::KickDriftKick`, `FNBodyIntegrator::Step`, `FSimClock::Advance`.
 - [x] **Phase 2 — AstroBodies.** Implement `FBodyRegistry::LoadFromDataTables`; author `DT_Planets.csv` with real masses/radii/orbital elements for the Sun + 8 planets; wire `ACelestialBody::Tick` to read integrator output.
 - [x] **Phase 3 — AstroTime.** Implement `UTimeController` play/pause/rewind/timescale; confirm every Phase 1-2 class reads time from here, not `GetWorld()`.
-- [ ] **Phase 4 — Minimal proof-of-motion scene.** Placeholder spheres orbiting correctly in `L_SolarSystem`, no art pass yet — this validates the physics visually before any rendering investment.
+- [x] **Phase 4 — Minimal proof-of-motion scene.** Placeholder spheres orbiting correctly in `L_SolarSystem`, no art pass yet — this validates the physics visually before any rendering investment.
 - [ ] **Phase 5 — AstroActivation.** Implement `FActivationManager` tier promotion/demotion, the 3-lock cap with demotion-of-oldest, reference-frame handling.
 - [ ] **Phase 6 — AstroRendering.** Corona/flare, atmospheric scattering, ring shaders; split Lumen/Nanite budgets per platform (desktop full, VR trimmed for 90Hz).
 - [ ] **Phase 7 — Scale and precision infrastructure.** Confirm floating-origin behavior at true scale; build the Solar-System ↔ Galaxy scale-domain transition.

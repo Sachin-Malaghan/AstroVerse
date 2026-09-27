@@ -239,16 +239,23 @@ FQuat UAstroSimulationSubsystem::SimToEngineRotation(const FAstroMatrix3d& BodyT
     return FMatrix(FPlane(X, 0.0), FPlane(Y, 0.0), FPlane(Z, 0.0), FPlane(0.0, 0.0, 0.0, 1.0)).ToQuat();
 }
 
+FVector UAstroSimulationSubsystem::SimToScaledEnginePosition(const FAstroVector3d& SimPositionMeters, double* OutScaleFactor) const
+{
+    const FScaledSpacePlacement Placement = ScaledSpace::Place(SimPositionMeters - GetRenderOrigin(), LinearRenderLimitMeters);
+    if (OutScaleFactor)
+    {
+        *OutScaleFactor = Placement.ScaleFactor;
+    }
+    return SimToEngineDirection(Placement.RenderOffsetMeters * AstroConstants::UnrealUnitsPerMeter);
+}
+
 bool UAstroSimulationSubsystem::GetBodyRenderTransform(int32 BodyIndex, FVector& OutLocationCm, FQuat& OutRotation, double& OutScaleFactor) const
 {
     if (!bReady || !Registry.GetAll().IsValidIndex(BodyIndex))
     {
         return false;
     }
-    const FAstroVector3d TrueOffset = Simulation.GetBodyState(BodyIndex).Position - GetRenderOrigin();
-    const FScaledSpacePlacement Placement = ScaledSpace::Place(TrueOffset, LinearRenderLimitMeters);
-    OutLocationCm = SimToEngineDirection(Placement.RenderOffsetMeters * AstroConstants::UnrealUnitsPerMeter);
-    OutScaleFactor = Placement.ScaleFactor;
+    OutLocationCm = SimToScaledEnginePosition(Simulation.GetBodyState(BodyIndex).Position, &OutScaleFactor);
     OutRotation = SimToEngineRotation(Registry.Get(BodyIndex).GetOrientationAt(Simulation.GetSimSeconds()));
     return true;
 }

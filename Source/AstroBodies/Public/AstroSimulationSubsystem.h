@@ -54,6 +54,8 @@ public:
     FVector SimToEnginePosition(const FAstroVector3d& SimPositionMeters) const;
     FAstroVector3d EngineToSimPosition(const FVector& EngineLocationCm) const;
     static FQuat SimToEngineRotation(const FAstroMatrix3d& BodyToEcliptic);
+    // Scaled-space engine location for an arbitrary sim point (for markers, trails, labels).
+    FVector SimToScaledEnginePosition(const FAstroVector3d& SimPositionMeters, double* OutScaleFactor = nullptr) const;
 
     double GetLinearRenderLimitMeters() const { return LinearRenderLimitMeters; }
 

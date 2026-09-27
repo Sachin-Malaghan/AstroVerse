@@ -8,4 +8,6 @@ UCLASS()
 class ASTROAPP_API AAstroGameMode : public AGameModeBase
 {
     GENERATED_BODY()
+public:
+    AAstroGameMode();
 };

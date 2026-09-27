@@ -18,6 +18,8 @@
   "Plugins": [
     { "Name": "EnhancedInput", "Enabled": true },
     { "Name": "OpenXR", "Enabled": true },
-    { "Name": "Niagara", "Enabled": true }
+    { "Name": "Niagara", "Enabled": true },
+    { "Name": "PythonScriptPlugin", "Enabled": true, "TargetAllowList": [ "Editor" ] },
+    { "Name": "EditorScriptingUtilities", "Enabled": true, "TargetAllowList": [ "Editor" ] }
   ]
 }

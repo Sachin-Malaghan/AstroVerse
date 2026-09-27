@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "BodyDataRow.h"
+#include "Math/AstroVector3d.h"
 #include "AstroBody.generated.h"
 // Base class for every simulated body. See CLAUDE.md Phase 2.
 // Real orbital elements and mass live in Data Tables (Content/Bodies/DataTables),
@@ -11,6 +12,7 @@
 
 class UAstroSimulationSubsystem;
 class UStaticMeshComponent;
+class UMaterialInstanceDynamic;
 struct FBodyDefinition;
 
 UCLASS(Abstract)
@@ -59,4 +61,16 @@ protected:
     TWeakObjectPtr<UAstroSimulationSubsystem> Simulation;
     int32 BodyIndex = INDEX_NONE;
     double RenderScaleFactor = 1.0;
+
+private:
+    // Validation-only orbit trail (astro.Debug.Trails): parent-relative sim positions.
+    void UpdateDebugTrail();
+    TArray<FAstroVector3d> TrailPoints;
+    double LastTrailSampleTime = 0.0;
+
+    // Per-body shading input: the true direction to the star from this body, which a
+    // single scene light cannot provide once bodies are far from the camera.
+    void UpdateSunDirection();
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInstanceDynamic> SurfaceMaterial;
 };
