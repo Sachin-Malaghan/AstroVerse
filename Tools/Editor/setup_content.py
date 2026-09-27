@@ -538,6 +538,7 @@ def build_galaxy_materials():
         "CameraInside": g.scalar("CameraInside", 0.0),
         "Brightness": g.scalar("Brightness", 0.8),
         "HalfSize": g.vector("HalfSize", (25, 25, 3, 0)),
+        "Steps": g.scalar("Steps", 96.0),
     }
     c = g.custom("GalaxyVolume.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT4)
     g.wire(c, inputs)

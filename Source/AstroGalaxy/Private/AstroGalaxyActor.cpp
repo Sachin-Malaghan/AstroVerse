@@ -1,5 +1,6 @@
 // See CLAUDE.md Phase 10.
 #include "AstroGalaxyActor.h"
+#include "HAL/IConsoleManager.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/PostProcessComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -9,6 +10,15 @@
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
+
+// Raymarch samples for the galaxy volume; the render budget lists set it (VR runs fewer).
+static TAutoConsoleVariable<int32> CVarAstroGalaxyRaySteps(
+    TEXT("astro.Galaxy.RaySteps"), 96, TEXT("Galaxy volume raymarch samples per pixel (8-256)."));
+
+// Resolution of the (after-DOF) translucency pass while the galaxy domain is shown; the
+// volume is smooth, so VR renders it at half resolution. Restored on leaving the domain.
+static TAutoConsoleVariable<float> CVarAstroGalaxyTranslucencyPercentage(
+    TEXT("astro.Galaxy.TranslucencyScreenPercentage"), 100.0f, TEXT("r.SeparateTranslucencyScreenPercentage applied in the galaxy domain."));
 
 namespace
 {
@@ -82,6 +92,20 @@ AAstroGalaxyActor::AAstroGalaxyActor()
 
 void AAstroGalaxyActor::SetDomainActive(bool bActive)
 {
+    if (IConsoleVariable* Translucency = IConsoleManager::Get().FindConsoleVariable(TEXT("r.SeparateTranslucencyScreenPercentage")))
+    {
+        if (bActive && !bTranslucencyOverridden)
+        {
+            SavedTranslucencyPercentage = Translucency->GetFloat();
+            Translucency->Set(CVarAstroGalaxyTranslucencyPercentage.GetValueOnGameThread(), ECVF_SetByCode);
+            bTranslucencyOverridden = true;
+        }
+        else if (!bActive && bTranslucencyOverridden)
+        {
+            Translucency->Set(SavedTranslucencyPercentage, ECVF_SetByCode);
+            bTranslucencyOverridden = false;
+        }
+    }
     SetActorHiddenInGame(!bActive);
     PostProcess->bEnabled = bActive;
     SetActorTickEnabled(bActive);
@@ -118,6 +142,7 @@ void AAstroGalaxyActor::Tick(float DeltaSeconds)
     if (VolumeMID)
     {
         VolumeMID->SetScalarParameterValue(TEXT("CameraInside"), bInside ? 1.0f : 0.0f);
+        VolumeMID->SetScalarParameterValue(TEXT("Steps"), static_cast<float>(CVarAstroGalaxyRaySteps.GetValueOnGameThread()));
     }
     // Keep the marker readable at any zoom: grow with distance, and face the label to the camera.
     const double Distance = FVector::Dist(Camera, SunMarker->GetComponentLocation());

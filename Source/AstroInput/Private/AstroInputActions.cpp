@@ -144,6 +144,9 @@ void UAstroInputActions::BuildGlobal()
     UInputMappingContext* C = GlobalContext;
     Map(C, Select, EKeys::LeftMouseButton);
     Map(C, Select, EKeys::Gamepad_RightThumbstick);
+    // Mobile groundwork (Phase 12): a tap selects what's under the reticle. Touch look/move
+    // gestures are left to the port.
+    Map(C, Select, EKeys::TouchKeys[ETouchIndex::Touch1]);
     Map(C, TimeFaster, EKeys::RightBracket);
     Map(C, TimeFaster, EKeys::Gamepad_DPad_Right);
     Map(C, TimeSlower, EKeys::LeftBracket);

@@ -17,6 +17,20 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogAstroRendering, Log, All);
 
+static TAutoConsoleVariable<FString> CVarAstroRenderBudget(
+    TEXT("astro.Render.Budget"), TEXT("auto"),
+    TEXT("Render budget: auto (device), desktop, vr, mobile. Applied at begin play / astro.Render.ApplyBudget."));
+
+static FAutoConsoleCommandWithWorld GAstroCmdApplyBudget(
+    TEXT("astro.Render.ApplyBudget"), TEXT("Re-apply the render budget (after changing astro.Render.Budget)"),
+    FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World)
+    {
+        if (UAstroRenderingSubsystem* Rendering = UAstroRenderingSubsystem::Get(World))
+        {
+            Rendering->ApplyRenderBudget();
+        }
+    }));
+
 bool UAstroRenderingSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
     const UWorld* World = Cast<UWorld>(Outer);
@@ -107,17 +121,44 @@ bool UAstroRenderingSubsystem::TryDecorate()
     ApplyRenderBudget();
     bDecorated = true;
     UE_LOG(LogAstroRendering, Log, TEXT("Decorated %d bodies (%d appearance rows); %s render budget."),
-        Sim->GetRegistry().Num(), Appearance.Num(), bVRBudget ? TEXT("VR") : TEXT("desktop"));
+        Sim->GetRegistry().Num(), Appearance.Num(), *GetBudgetName());
     return true;
+}
+
+FString UAstroRenderingSubsystem::GetBudgetName() const
+{
+    return Budget == EAstroRenderBudget::VR ? TEXT("VR") : Budget == EAstroRenderBudget::Mobile ? TEXT("mobile") : TEXT("desktop");
+}
+
+double UAstroRenderingSubsystem::GetFrameBudgetMs() const
+{
+    const UAstroRenderingSettings* Settings = GetDefault<UAstroRenderingSettings>();
+    const double Hz = Budget == EAstroRenderBudget::VR ? Settings->VRTargetHz
+                    : Budget == EAstroRenderBudget::Mobile ? Settings->MobileTargetHz
+                    : Settings->DesktopTargetHz;
+    return 1000.0 / FMath::Max(1.0, Hz);
 }
 
 void UAstroRenderingSubsystem::ApplyRenderBudget()
 {
-    bVRBudget = GEngine && GEngine->XRSystem.IsValid() && GEngine->StereoRenderingDevice.IsValid()
-             && GEngine->StereoRenderingDevice->IsStereoEnabled();
+    const FString Forced = CVarAstroRenderBudget.GetValueOnGameThread();
+    if (Forced.Equals(TEXT("desktop"), ESearchCase::IgnoreCase)) { Budget = EAstroRenderBudget::Desktop; }
+    else if (Forced.Equals(TEXT("vr"), ESearchCase::IgnoreCase)) { Budget = EAstroRenderBudget::VR; }
+    else if (Forced.Equals(TEXT("mobile"), ESearchCase::IgnoreCase)) { Budget = EAstroRenderBudget::Mobile; }
+    else
+    {
+        const bool bStereo = GEngine && GEngine->XRSystem.IsValid() && GEngine->StereoRenderingDevice.IsValid()
+                          && GEngine->StereoRenderingDevice->IsStereoEnabled();
+        Budget = bStereo ? EAstroRenderBudget::VR
+               : (PLATFORM_ANDROID || PLATFORM_IOS) ? EAstroRenderBudget::Mobile
+               : EAstroRenderBudget::Desktop;
+    }
 
     const UAstroRenderingSettings* Settings = GetDefault<UAstroRenderingSettings>();
-    for (const FString& Entry : bVRBudget ? Settings->VRCVars : Settings->DesktopCVars)
+    const TArray<FString>& Entries = Budget == EAstroRenderBudget::VR ? Settings->VRCVars
+                                   : Budget == EAstroRenderBudget::Mobile ? Settings->MobileCVars
+                                   : Settings->DesktopCVars;
+    for (const FString& Entry : Entries)
     {
         FString Name, Value;
         if (!Entry.Split(TEXT("="), &Name, &Value))

@@ -75,4 +75,18 @@ public:
 
     UPROPERTY(Config, EditAnywhere, Category = "Budgets")
     TArray<FString> VRCVars;
+
+    // Groundwork for the mobile port (Phase 12): not yet exercised on a device.
+    UPROPERTY(Config, EditAnywhere, Category = "Budgets")
+    TArray<FString> MobileCVars;
+
+    // Frame-time targets used by astro.Perf.Sample / perf_pass.ps1.
+    UPROPERTY(Config, EditAnywhere, Category = "Budgets")
+    double DesktopTargetHz = 60.0;
+
+    UPROPERTY(Config, EditAnywhere, Category = "Budgets")
+    double VRTargetHz = 90.0;
+
+    UPROPERTY(Config, EditAnywhere, Category = "Budgets")
+    double MobileTargetHz = 30.0;
 };

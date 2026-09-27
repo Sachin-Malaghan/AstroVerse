@@ -55,4 +55,7 @@ public:
 private:
     UPROPERTY(Transient)
     TObjectPtr<UMaterialInstanceDynamic> VolumeMID;
+
+    float SavedTranslucencyPercentage = 100.0f;
+    bool bTranslucencyOverridden = false;
 };

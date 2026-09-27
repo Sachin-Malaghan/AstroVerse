@@ -98,7 +98,7 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - [x] **Phase 9 — AstroTravel.** Cinematic warp and player-piloted ship, user-selectable; clock-during-transit is a user setting. See "Decided — travel" below.
 - [x] **Phase 10 — AstroGalaxy.** Milky Way disc representation, Sun position/velocity marker, scale-domain transition polish.
 - [x] **Phase 11 — AstroUI.** God-mode time HUD, teaching-mode facts panels, VR world-space diegetic panels.
-- [ ] **Phase 12 — Platform polish.** VR performance budget pass; groundwork for the later mobile port.
+- [x] **Phase 12 — Platform polish.** VR performance budget pass; groundwork for the later mobile port.
 
 ## UI (Phase 11)
 
@@ -106,6 +106,14 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - The subsystem turns engine events into toasts: a 4th observation lock demoting the oldest, full N-body physics suspended at high time scales, travel start/arrival, scale-domain changes.
 - VR: the same HUD (compact) is hosted on a `UWidgetComponent` on the left controller; the right controller carries a `UWidgetInteractionComponent` pointer (Select presses it). Untested without a headset.
 - Validation: `capture_commands.ps1 -ShowUI` (screenshots include UMG); dev commands `astro.Select <Body>`, `astro.UI.Toggle HUD|Help|Menu`.
+
+## Performance budgets (Phase 12)
+
+- One budget system: `UAstroRenderingSubsystem` picks Desktop / VR / Mobile (auto from device; `astro.Render.Budget desktop|vr|mobile` + `astro.Render.ApplyBudget` forces one) and applies the matching cvar list from `[/Script/AstroRendering.AstroRenderingSettings]` in DefaultGame.ini. Targets: desktop 60 Hz, VR 90 Hz, mobile 30 Hz (`*TargetHz`).
+- Measure with `Tools/Validation/perf_pass.ps1 [-Budget vr]`: seven scenes, one `AstroPerf:` line each (avg frame / game / render / GPU ms vs budget). `-Budget vr` uses `-emulatestereo` at screen percentage 200 on a 1920x1032 window (~1920x2064 per eye, Quest 3 / Index class). `astro.Perf.Sample <s> <label>` works in any session; `profilegpu` gives the per-pass breakdown.
+- Findings on the dev machine (Quadro M4000, Maxwell 2015 — below VR min-spec), VR budget, before -> after: Earth orbit 29.3 -> 17.1 ms, Mars surface 34.2 -> 22.1, inner system 23.1 -> 11.0, galaxy 194 -> 20.0. Wins: SSAO off in VR (~5 ms per eye, no visual value under a single point-like sun); translucency lighting volume off everywhere (all translucency is unlit); galaxy raymarch clipped to the luminous disc, empty-halo and opacity early-outs, sine-free hash, 48 steps in VR (`astro.Galaxy.RaySteps`) and half-resolution translucency while in the galaxy domain (`astro.Galaxy.TranslucencyScreenPercentage`).
+- Remaining VR cost on this GPU is spread (base pass ~4 ms, sun lighting + shadows ~3.5, reflections/sky ~1.8, TAA). About 4 ms is editor-hosted `-game` overhead (`CompositeDebugPrimitives`, `ClearGPUMessageBuffer`) that a packaged build does not pay. On a VR min-spec GPU (RTX 2070 class, ~3x this card) every scene should fit 11.1 ms; verify on hardware with a headset.
+- Mobile groundwork (not yet run on a device): `MobileCVars` budget; `Config/DefaultDeviceProfiles.ini` caps TEXTUREGROUP_World (the 8K body maps) at 2K on Android/iOS; a tap (Touch1) selects under the reticle. Still to do for the port: touch look/move gestures, an ES3.1 / Vulkan shader-compile pass over the custom HLSL materials, a mobile HUD layout.
 
 ## Decided — travel (Phase 9, decided 2026-09-27)
 
