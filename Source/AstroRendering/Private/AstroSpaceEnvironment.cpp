@@ -76,6 +76,7 @@ AAstroSpaceEnvironment::AAstroSpaceEnvironment()
     SkyLight->SetIntensity(1.0f);
     // The stars must not light the ground: capture only the atmosphere (and nothing when there is none).
     SkyLight->bLowerHemisphereIsBlack = true;
+    SkyLight->SetVisibility(false); // on only while a SkyAtmosphere is active
 }
 
 void AAstroSpaceEnvironment::BeginPlay()
@@ -200,6 +201,7 @@ void AAstroSpaceEnvironment::UpdateSkyAtmosphere(const UAstroSimulationSubsystem
         if (SkyBodyIndex != INDEX_NONE)
         {
             SkyAtmosphere->SetVisibility(false);
+            SkyLight->SetVisibility(false); // real-time capture of an empty sky is black anyway
             SkyBodyIndex = INDEX_NONE;
         }
         return;
@@ -220,6 +222,7 @@ void AAstroSpaceEnvironment::UpdateSkyAtmosphere(const UAstroSimulationSubsystem
     {
         ConfigureSkyFor(BestShading, SkyGround);
         SkyAtmosphere->SetVisibility(true);
+        SkyLight->SetVisibility(true);
         SkyBodyIndex = Best;
         SkyGroundMeters = SkyGround;
     }

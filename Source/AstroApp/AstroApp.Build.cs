@@ -13,6 +13,7 @@ public class AstroApp : ModuleRules
             "InputCore",
             "EnhancedInput",
             "HeadMountedDisplay",
+            "UMG",
             "AstroCore",
             "AstroBodies",
             "AstroTime",

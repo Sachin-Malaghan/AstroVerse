@@ -2,6 +2,8 @@
 #include "HAL/IConsoleManager.h"
 #include "AstroSimulationSubsystem.h"
 #include "AstroPawnBase.h"
+#include "AstroPlayerController.h"
+#include "AstroUISubsystem.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Containers/Ticker.h"
@@ -220,5 +222,30 @@ namespace
             {
                 Camera->SetFieldOfView(FCString::Atof(*Args[0]));
             }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdSelect(
+        TEXT("astro.Select"), TEXT("astro.Select <BodyID> - select a body as if clicked (HUD info card)"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            AAstroPlayerController* PC = World ? Cast<AAstroPlayerController>(World->GetFirstPlayerController()) : nullptr;
+            if (PC && Args.Num() > 0)
+            {
+                PC->SelectBody(FName(*Args[0]));
+            }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdUIToggle(
+        TEXT("astro.UI.Toggle"), TEXT("astro.UI.Toggle HUD|Help|Menu"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            UAstroUISubsystem* UI = World ? UAstroUISubsystem::Get(World->GetFirstPlayerController()) : nullptr;
+            if (!UI || Args.Num() == 0)
+            {
+                return;
+            }
+            if (Args[0] == TEXT("Help")) { UI->ToggleHelp(); }
+            else if (Args[0] == TEXT("Menu")) { UI->ToggleMenu(); }
+            else { UI->ToggleHUD(); }
         }));
 }

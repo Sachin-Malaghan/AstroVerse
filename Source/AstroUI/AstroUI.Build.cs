@@ -13,8 +13,13 @@ public class AstroUI : ModuleRules
             "UMG",
             "Slate",
             "SlateCore",
+            "DeveloperSettings",
+            "AstroCore",
             "AstroTime",
             "AstroBodies",
+            "AstroActivation",
+            "AstroTravel",
+            "AstroGalaxy",
             "AstroInput"
         });
 

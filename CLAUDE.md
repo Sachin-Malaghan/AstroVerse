@@ -21,8 +21,7 @@ Launcher engine builds do not ship `GenerateProjectFiles.bat`; drive UnrealBuild
 # Compile the editor target
 "<Engine>\Engine\Build\BatchFiles\Build.bat" AstroVerseEditor Win64 Development -project="<repo>\AstroVerse.uproject" -waitmutex
 
-# (or: powershell -ExecutionPolicy Bypass -File ToolsValidation
-un_tests.ps1   -- prints a pass/fail summary)
+# (or: powershell -ExecutionPolicy Bypass -File Tools\Validation\run_tests.ps1   -- prints a pass/fail summary)
 # Run all AstroVerse automation tests headless (results in Saved/Logs/Tests.log)
 "<Engine>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "<repo>\AstroVerse.uproject" -nullrhi -unattended -nosplash -nopause -ExecCmds="Automation RunTests AstroVerse; Quit" -TestExit="Automation Test Queue Empty" -log=Tests.log
 ```
@@ -98,8 +97,15 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - [x] **Phase 8 — AstroInput + AstroApp pawns.** Desktop flycam pawn first, then VR pawn with room-scale/teleport locomotion.
 - [x] **Phase 9 — AstroTravel.** Cinematic warp and player-piloted ship, user-selectable; clock-during-transit is a user setting. See "Decided — travel" below.
 - [x] **Phase 10 — AstroGalaxy.** Milky Way disc representation, Sun position/velocity marker, scale-domain transition polish.
-- [ ] **Phase 11 — AstroUI.** God-mode time HUD, teaching-mode facts panels, VR world-space diegetic panels.
+- [x] **Phase 11 — AstroUI.** God-mode time HUD, teaching-mode facts panels, VR world-space diegetic panels.
 - [ ] **Phase 12 — Platform polish.** VR performance budget pass; groundwork for the later mobile port.
+
+## UI (Phase 11)
+
+- All UMG is built in C++ (`UAstroHUDWidget`, `UAstroPauseMenuWidget`), owned per local player by `UAstroUISubsystem`; no widget Blueprints. Teaching-mode text lives in `Content/UI/DataTables/DT_Facts.csv` (row = BodyID); the numbers on the card (radius, gravity, orbit, current distance and speed) are computed live from the simulation, not typed in.
+- The subsystem turns engine events into toasts: a 4th observation lock demoting the oldest, full N-body physics suspended at high time scales, travel start/arrival, scale-domain changes.
+- VR: the same HUD (compact) is hosted on a `UWidgetComponent` on the left controller; the right controller carries a `UWidgetInteractionComponent` pointer (Select presses it). Untested without a headset.
+- Validation: `capture_commands.ps1 -ShowUI` (screenshots include UMG); dev commands `astro.Select <Body>`, `astro.UI.Toggle HUD|Help|Menu`.
 
 ## Decided — travel (Phase 9, decided 2026-09-27)
 

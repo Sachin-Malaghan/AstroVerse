@@ -69,6 +69,8 @@ def import_data_tables():
                      "/Game/Bodies/DataTables", "DT_Terrain", "/Script/AstroBodies.AstroTerrainRow")
     import_csv_table(os.path.join(PROJECT_CONTENT, "Rendering", "DataTables", "DT_Appearance.csv"),
                      "/Game/Rendering/DataTables", "DT_Appearance", "/Script/AstroRendering.AstroBodyAppearanceRow")
+    import_csv_table(os.path.join(PROJECT_CONTENT, "UI", "DataTables", "DT_Facts.csv"),
+                     "/Game/UI/DataTables", "DT_Facts", "/Script/AstroUI.AstroBodyFactsRow")
 
 
 # ----------------------------------------------------------------------------- textures

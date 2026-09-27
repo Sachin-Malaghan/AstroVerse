@@ -39,6 +39,7 @@ public:
     UPROPERTY() TObjectPtr<UInputAction> ToggleGalaxy;
     UPROPERTY() TObjectPtr<UInputAction> ToggleHUD;
     UPROPERTY() TObjectPtr<UInputAction> Menu;
+    UPROPERTY() TObjectPtr<UInputAction> Help;
 
     UPROPERTY() TObjectPtr<UInputMappingContext> DesktopContext;
     UPROPERTY() TObjectPtr<UInputMappingContext> VRContext;

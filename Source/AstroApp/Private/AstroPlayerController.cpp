@@ -5,6 +5,9 @@
 #include "AstroScaleDomainSubsystem.h"
 #include "AstroSimulationSubsystem.h"
 #include "AstroTravelSubsystem.h"
+#include "AstroPawnBase.h"
+#include "AstroUIFormat.h"
+#include "AstroUISubsystem.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
@@ -41,6 +44,37 @@ void AAstroPlayerController::BeginPlay()
     }
     SetInputMode(FInputModeGameOnly());
     bShowMouseCursor = false;
+
+    if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this))
+    {
+        const bool bVR = GEngine && GEngine->StereoRenderingDevice.IsValid() && GEngine->StereoRenderingDevice->IsStereoEnabled();
+        UI->Create(this, bVR);
+    }
+}
+
+void AAstroPlayerController::PlayerTick(float DeltaTime)
+{
+    Super::PlayerTick(DeltaTime);
+    UAstroUISubsystem* UI = UAstroUISubsystem::Get(this);
+    const AAstroPawnBase* Viewer = Cast<AAstroPawnBase>(GetPawn());
+    const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    if (!UI || !Viewer || !Sim)
+    {
+        return;
+    }
+    const UAstroScaleDomainSubsystem* Domains = UAstroScaleDomainSubsystem::Get(this);
+    if (Domains && Domains->GetDomain() == EAstroScaleDomain::Galaxy)
+    {
+        UI->SetViewerStatus(TEXT("Milky Way  -  galaxy scale"));
+        return;
+    }
+    const FName Body = Viewer->GetReferenceBody();
+    const int32 Index = Sim->FindBodyIndex(Body);
+    const FString Where = Index != INDEX_NONE ? Sim->GetRegistry().Get(Index).DisplayName.ToString() : Body.ToString();
+    UI->SetViewerStatus(FString::Printf(TEXT("%s %s   -   altitude %s   -   %s   -   %s"),
+        Viewer->GetLocomotion() == EAstroLocomotion::Walking ? TEXT("On") : TEXT("Near"), *Where,
+        *AstroUIFormat::Distance(Viewer->GetAltitude()), *AstroUIFormat::Speed(Viewer->GetSpeedMetersPerSecond()),
+        Sim->IsRotatingFrame() ? TEXT("surface frame") : TEXT("orbital frame")));
 }
 
 void AAstroPlayerController::SetupInputComponent()
@@ -58,6 +92,7 @@ void AAstroPlayerController::SetupInputComponent()
         EIC->BindAction(InputActions->ToggleHUD, ETriggerEvent::Started, this, &AAstroPlayerController::OnToggleHUDAction);
         EIC->BindAction(InputActions->Menu, ETriggerEvent::Started, this, &AAstroPlayerController::OnMenuAction);
         EIC->BindAction(InputActions->Travel, ETriggerEvent::Started, this, &AAstroPlayerController::OnTravelAction);
+        EIC->BindAction(InputActions->Help, ETriggerEvent::Started, this, &AAstroPlayerController::OnHelpAction);
     }
 }
 
@@ -95,6 +130,10 @@ void AAstroPlayerController::SelectBody(FName BodyID)
     {
         SelectedBody = BodyID;
         UE_LOG(LogAstroController, Display, TEXT("Selected %s"), *BodyID.ToString());
+        if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this))
+        {
+            UI->SetSelectedBody(BodyID);
+        }
         OnSelectionChanged.Broadcast(BodyID);
     }
 }
@@ -157,8 +196,22 @@ void AAstroPlayerController::OnToggleGalaxy(const FInputActionValue& Value)
     }
 }
 
-void AAstroPlayerController::OnToggleHUDAction(const FInputActionValue& Value) { OnToggleHUD.Broadcast(); }
-void AAstroPlayerController::OnMenuAction(const FInputActionValue& Value) { OnMenu.Broadcast(); }
+void AAstroPlayerController::OnToggleHUDAction(const FInputActionValue& Value)
+{
+    if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this)) { UI->ToggleHUD(); }
+    OnToggleHUD.Broadcast();
+}
+
+void AAstroPlayerController::OnMenuAction(const FInputActionValue& Value)
+{
+    if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this)) { UI->ToggleMenu(); }
+    OnMenu.Broadcast();
+}
+
+void AAstroPlayerController::OnHelpAction(const FInputActionValue& Value)
+{
+    if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this)) { UI->ToggleHelp(); }
+}
 void AAstroPlayerController::OnTravelAction(const FInputActionValue& Value)
 {
     // Travel to the selected body (or the one under the reticle); pressing again mid-transit skips ahead.

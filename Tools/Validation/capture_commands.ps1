@@ -9,7 +9,8 @@ param(
     [string]$Engine = "C:\Program Files\Epic Games\UE_5.8\Engine",
     [int]$Width = 1600,
     [int]$Height = 900,
-    [double]$SettleSeconds = 6
+    [double]$SettleSeconds = 6,
+    [switch]$ShowUI
 )
 
 $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -23,7 +24,7 @@ foreach ($shot in ($Shots -split '\|')) {
     $k = 0
     foreach ($c in ($shot -split ";")) { if ($c.Trim()) { $cmds += "astro.Debug.DelayedExec $($t + 0.3 * $k) $($c.Trim())"; $k++ } }
     $t += $SettleSeconds
-    $cmds += "astro.Debug.DelayedExec $t shot"
+    $cmds += "astro.Debug.DelayedExec $t shot$(if ($ShowUI) { ' showui' })"
     $t += 1.0
 }
 $cmds += "astro.Debug.DelayedExec $($t + 1) quit"

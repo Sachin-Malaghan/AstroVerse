@@ -9,6 +9,10 @@
 #include "Engine/World.h"
 #include "InputActionValue.h"
 #include "MotionControllerComponent.h"
+#include "AstroUISubsystem.h"
+#include "AstroHUDWidget.h"
+#include "Components/WidgetComponent.h"
+#include "Components/WidgetInteractionComponent.h"
 #include "UObject/ConstructorHelpers.h"
 
 AAstroVRPawn::AAstroVRPawn()
@@ -23,6 +27,19 @@ AAstroVRPawn::AAstroVRPawn()
     RightController = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("RightController"));
     RightController->SetupAttachment(RootComponent);
     RightController->SetTrackingMotionSource(TEXT("Right"));
+
+    WristPanel = CreateDefaultSubobject<UWidgetComponent>(TEXT("WristPanel"));
+    WristPanel->SetupAttachment(LeftController);
+    WristPanel->SetWidgetSpace(EWidgetSpace::World);
+    WristPanel->SetDrawSize(FVector2D(1100.0f, 720.0f));
+    WristPanel->SetRelativeLocationAndRotation(FVector(6.0, 0.0, 8.0), FRotator(40.0, 180.0, 0.0));
+    WristPanel->SetRelativeScale3D(FVector(0.025f));
+    WristPanel->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+
+    Pointer = CreateDefaultSubobject<UWidgetInteractionComponent>(TEXT("Pointer"));
+    Pointer->SetupAttachment(RightController);
+    Pointer->InteractionDistance = 300.0f;
+    Pointer->bShowDebug = true; // the laser itself
 
     TeleportMarker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TeleportMarker"));
     TeleportMarker->SetupAttachment(RootComponent);
@@ -53,7 +70,32 @@ void AAstroVRPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
         EIC->BindAction(A->SnapTurn, ETriggerEvent::Completed, this, &AAstroVRPawn::OnSnapTurn);
         EIC->BindAction(A->Teleport, ETriggerEvent::Started, this, &AAstroVRPawn::OnTeleportStarted);
         EIC->BindAction(A->Teleport, ETriggerEvent::Completed, this, &AAstroVRPawn::OnTeleportReleased);
+        EIC->BindAction(A->Select, ETriggerEvent::Started, this, &AAstroVRPawn::OnPointerPressed);
+        EIC->BindAction(A->Select, ETriggerEvent::Completed, this, &AAstroVRPawn::OnPointerReleased);
     }
+}
+
+void AAstroVRPawn::BeginPlay()
+{
+    Super::BeginPlay();
+    // Host the (compact) HUD on the wrist once the UI exists.
+    if (const APlayerController* PC = Cast<APlayerController>(GetController()))
+    {
+        if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(PC); UI && UI->GetHUD())
+        {
+            WristPanel->SetWidget(UI->GetHUD());
+        }
+    }
+}
+
+void AAstroVRPawn::OnPointerPressed(const FInputActionValue& Value)
+{
+    Pointer->PressPointerKey(EKeys::LeftMouseButton);
+}
+
+void AAstroVRPawn::OnPointerReleased(const FInputActionValue& Value)
+{
+    Pointer->ReleasePointerKey(EKeys::LeftMouseButton);
 }
 
 FQuat AAstroVRPawn::GetMovementBasis() const

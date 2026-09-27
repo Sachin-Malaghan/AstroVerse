@@ -64,6 +64,8 @@ UAstroInputActions* UAstroInputActions::Create(UObject* Outer)
     A->ToggleGalaxy = MakeAction(A, TEXT("IA_ToggleGalaxy"), EInputActionValueType::Boolean);
     A->ToggleHUD = MakeAction(A, TEXT("IA_ToggleHUD"), EInputActionValueType::Boolean);
     A->Menu = MakeAction(A, TEXT("IA_Menu"), EInputActionValueType::Boolean);
+    A->Menu->bTriggerWhenPaused = true; // the menu pauses the game and must be able to close
+    A->Help = MakeAction(A, TEXT("IA_Help"), EInputActionValueType::Boolean);
 
     A->DesktopContext = NewObject<UInputMappingContext>(A, TEXT("IMC_Desktop"));
     A->VRContext = NewObject<UInputMappingContext>(A, TEXT("IMC_VR"));
@@ -156,5 +158,6 @@ void UAstroInputActions::BuildGlobal()
     Map(C, ToggleGalaxy, EKeys::Gamepad_Special_Left);
     Map(C, ToggleHUD, EKeys::H);
     Map(C, Menu, EKeys::Escape);
+    Map(C, Help, EKeys::F1);
     Map(C, Menu, EKeys::Gamepad_Special_Right);
 }

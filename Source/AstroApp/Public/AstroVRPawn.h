@@ -10,6 +10,8 @@
 class UCameraComponent;
 class UMotionControllerComponent;
 class UStaticMeshComponent;
+class UWidgetComponent;
+class UWidgetInteractionComponent;
 struct FInputActionValue;
 
 UCLASS()
@@ -32,6 +34,13 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|VR")
     TObjectPtr<UMotionControllerComponent> RightController;
 
+    // Diegetic UI: the god-mode HUD on the left wrist, a laser pointer on the right hand.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|VR")
+    TObjectPtr<UWidgetComponent> WristPanel;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|VR")
+    TObjectPtr<UWidgetInteractionComponent> Pointer;
+
     // Marker at the teleport target while aiming.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|VR")
     TObjectPtr<UStaticMeshComponent> TeleportMarker;
@@ -50,6 +59,9 @@ protected:
 
 private:
     void OnSnapTurn(const FInputActionValue& Value);
+    void OnPointerPressed(const FInputActionValue& Value);
+    void OnPointerReleased(const FInputActionValue& Value);
+    virtual void BeginPlay() override;
     void OnTeleportStarted(const FInputActionValue& Value);
     void OnTeleportReleased(const FInputActionValue& Value);
     bool TraceTeleport(FVector& OutLocation) const;

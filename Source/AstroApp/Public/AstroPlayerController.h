@@ -19,6 +19,7 @@ class ASTROAPP_API AAstroPlayerController : public APlayerController
 public:
     virtual void BeginPlay() override;
     virtual void SetupInputComponent() override;
+    virtual void PlayerTick(float DeltaTime) override;
 
     const UAstroInputActions* GetInputActions() const { return InputActions; }
 
@@ -56,6 +57,7 @@ private:
     void OnToggleHUDAction(const FInputActionValue& Value);
     void OnMenuAction(const FInputActionValue& Value);
     void OnTravelAction(const FInputActionValue& Value);
+    void OnHelpAction(const FInputActionValue& Value);
 
     UPROPERTY(Transient)
     TObjectPtr<UAstroInputActions> InputActions;
