@@ -1,16 +1,19 @@
 #pragma once
-#include "CelestialBody.h"
+#include "AstroBody.h"
 #include "Planet.generated.h"
 // See CLAUDE.md Phase 2.
 
 UCLASS()
-class ASTROBODIES_API APlanet : public ACelestialBody
+class ASTROBODIES_API APlanet : public AAstroBody
 {
     GENERATED_BODY()
 public:
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Astro|Planet")
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|Planet")
     bool bHasRings = false;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Astro|Planet")
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|Planet")
     TArray<FName> MoonBodyIDs;
+
+protected:
+    virtual void OnBoundToDefinition(const FBodyDefinition& Definition) override;
 };

@@ -21,9 +21,11 @@ Launcher engine builds do not ship `GenerateProjectFiles.bat`; drive UnrealBuild
 # Compile the editor target
 "<Engine>\Engine\Build\BatchFiles\Build.bat" AstroVerseEditor Win64 Development -project="<repo>\AstroVerse.uproject" -waitmutex
 
-# Run AstroCore automation tests headless (results in Saved/Logs/Tests.log)
-"<Engine>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "<repo>\AstroVerse.uproject" -nullrhi -unattended -nosplash -nopause -ExecCmds="Automation RunTests AstroVerse.Core; Quit" -TestExit="Automation Test Queue Empty" -log=Tests.log
+# Run all AstroVerse automation tests headless (results in Saved/Logs/Tests.log)
+"<Engine>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "<repo>\AstroVerse.uproject" -nullrhi -unattended -nosplash -nopause -ExecCmds="Automation RunTests AstroVerse; Quit" -TestExit="Automation Test Queue Empty" -log=Tests.log
 ```
+
+After adding or removing a `.cpp` file, regenerate project files before building — the installed engine's UnrealBuildTool caches the file list and otherwise fails with unresolved externals.
 
 OpenXR "failed to find active runtime" errors in headless runs are expected when no headset runtime is installed.
 
@@ -83,23 +85,31 @@ Do not start a phase until the previous one compiles and the relevant module's c
 
 - [x] **Phase 0 — Environment.** Manual, human-only. See `SETUP.md`. Confirm before doing anything else.
 - [x] **Phase 1 — AstroCore.** Implement `FAstroVector3d` operators, `LeapfrogSolver::KickDriftKick`, `FNBodyIntegrator::Step`, `FSimClock::Advance`.
-- [ ] **Phase 2 — AstroBodies.** Implement `FBodyRegistry::LoadFromDataTables`; author `DT_Planets.csv` with real masses/radii/orbital elements for the Sun + 8 planets; wire `ACelestialBody::Tick` to read integrator output.
-- [ ] **Phase 3 — AstroTime.** Implement `UTimeController` play/pause/rewind/timescale; confirm every Phase 1-2 class reads time from here, not `GetWorld()`.
+- [x] **Phase 2 — AstroBodies.** Implement `FBodyRegistry::LoadFromDataTables`; author `DT_Planets.csv` with real masses/radii/orbital elements for the Sun + 8 planets; wire `ACelestialBody::Tick` to read integrator output.
+- [x] **Phase 3 — AstroTime.** Implement `UTimeController` play/pause/rewind/timescale; confirm every Phase 1-2 class reads time from here, not `GetWorld()`.
 - [ ] **Phase 4 — Minimal proof-of-motion scene.** Placeholder spheres orbiting correctly in `L_SolarSystem`, no art pass yet — this validates the physics visually before any rendering investment.
 - [ ] **Phase 5 — AstroActivation.** Implement `FActivationManager` tier promotion/demotion, the 3-lock cap with demotion-of-oldest, reference-frame handling.
 - [ ] **Phase 6 — AstroRendering.** Corona/flare, atmospheric scattering, ring shaders; split Lumen/Nanite budgets per platform (desktop full, VR trimmed for 90Hz).
 - [ ] **Phase 7 — Scale and precision infrastructure.** Confirm floating-origin behavior at true scale; build the Solar-System ↔ Galaxy scale-domain transition.
 - [ ] **Phase 8 — AstroInput + AstroApp pawns.** Desktop flycam pawn first, then VR pawn with room-scale/teleport locomotion.
-- [ ] **Phase 9 — AstroTravel.** **Blocked** — the transit style (player-piloted warp vs. fixed cinematic vs. instant cut) is an open decision; do not implement until it's resolved. See the "Blocked" note below.
+- [ ] **Phase 9 — AstroTravel.** Cinematic warp and player-piloted ship, user-selectable; clock-during-transit is a user setting. See "Decided — travel" below.
 - [ ] **Phase 10 — AstroGalaxy.** Milky Way disc representation, Sun position/velocity marker, scale-domain transition polish.
 - [ ] **Phase 11 — AstroUI.** God-mode time HUD, teaching-mode facts panels, VR world-space diegetic panels.
 - [ ] **Phase 12 — Platform polish.** VR performance budget pass; groundwork for the later mobile port.
 
-## Blocked — needs a decision before Phase 9
+## Decided — travel (Phase 9, decided 2026-09-27)
 
-The travel/warp transit style is undecided: a cinematic camera sequence, a flyable ship the player actively pilots through a stylized warp, or an instant cut with a loading beat. Also open: whether travel time scales with anything, how the destination gets selected, and whether the god-mode clock keeps advancing during transit. Do not guess an implementation for Phase 9 — surface this to the user and wait for a decision, or work on any other unblocked phase in the meantime.
+- **Two player-selectable transit styles**, both built: a **cinematic warp** (fixed camera sequence with a stylized warp effect) and a **player-piloted ship** the user flies through the warp. The choice is a user setting, not a build-time switch.
+- **God-mode clock during transit is a user setting:** either pause for the duration of the trip, or keep running at the current timescale.
+- Defaults until someone says otherwise: destination is picked from the body list / by pointing at a body; transit duration grows with the log of distance so short hops stay short.
+
+## Decided — design interpretations (2026-09-27)
+
+- **Planets are always N-body.** The Sun + 8 planets are integrated with full mutual gravity at every timescale (this is cheap: 9 particles). The fidelity tiers govern **moons** and render/detail budget: a Dormant moon follows an analytic conic about its parent's N-body position; an Active moon is split out as its own N-body particle. While its moons are Dormant, a planet's N-body particle represents the planet-system barycenter.
+- **Scaled-space rendering for far bodies.** Beyond a render-distance threshold, a body is drawn at a monotonically compressed distance and scaled down by exactly the same factor, so its angular size and draw order stay physically correct. This is a rendering technique (as in KSP), not artistic distance compression — simulation positions are always true scale.
+- **Moon coverage v1:** curated set — Earth's Moon, Phobos, Deimos, Io, Europa, Ganymede, Callisto, Titan. Adding more is a data change.
+- **Sim time** is seconds since J2000.0 (TDB, treated as uniform). Positions are meters in the J2000 ecliptic frame, origin at the solar-system barycenter.
 
 ## Open items not yet scoped
 
 - Asteroid belt representation: GPU-instanced/Niagara-driven per the fidelity system (never individually N-body simulated), but the exact rendering approach isn't decided.
-- Moon coverage for v1: all real moons system-wide, or a curated subset first (Earth's Moon, the Galilean moons, Titan) with the architecture supporting the rest later.

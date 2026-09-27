@@ -10,6 +10,7 @@ public class AstroTime : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
+            "DeveloperSettings",
             "AstroCore"
         });
 

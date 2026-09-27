@@ -88,3 +88,9 @@ double FNBodyIntegrator::ComputeTotalEnergy() const
     }
     return Kinetic + Potential;
 }
+
+void FNBodyIntegrator::SetStates(const std::vector<FMassiveBodyState>& States)
+{
+    Bodies = States;
+    bAccelerationsValid = false;
+}

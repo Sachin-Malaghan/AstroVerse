@@ -16,6 +16,8 @@ public:
     void Advance(double RealDeltaSeconds);
     void SetTimeScale(double NewScale) { TimeScale = NewScale; }
     void SetPaused(bool bInPaused) { bPaused = bInPaused; }
+    void SetSimulatedSeconds(double NewSimSeconds) { SimulatedSeconds = NewSimSeconds; }
+    bool IsPaused() const { return bPaused; }
 
 private:
     double SimulatedSeconds = 0.0;

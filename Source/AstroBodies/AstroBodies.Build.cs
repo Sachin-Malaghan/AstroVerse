@@ -10,7 +10,9 @@ public class AstroBodies : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
-            "AstroCore"
+            "DeveloperSettings",
+            "AstroCore",
+            "AstroTime"  // same (Simulation) layer: bodies advance off the god-mode clock
         });
 
         PrivateDependencyModuleNames.AddRange(new string[] { });

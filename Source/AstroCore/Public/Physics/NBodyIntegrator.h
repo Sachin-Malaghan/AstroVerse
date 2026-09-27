@@ -1,4 +1,5 @@
 #pragma once
+#include "Math/AstroConstants.h"
 #include "Math/AstroVector3d.h"
 #include <vector>
 // Full N-body gravitational integrator. Runs on a fixed timestep, independent
@@ -17,12 +18,14 @@ struct FMassiveBodyState
 class ASTROCORE_API FNBodyIntegrator
 {
 public:
-    static constexpr double GravitationalConstant = 6.67430e-11; // m^3 kg^-1 s^-2 (CODATA 2018)
+    static constexpr double GravitationalConstant = AstroConstants::GravitationalConstant;
 
     void AddBody(const FMassiveBodyState& Body);
     // One kick-drift-kick step. Negative DeltaSimSeconds runs the system backward.
     void Step(double DeltaSimSeconds);
     const std::vector<FMassiveBodyState>& GetStates() const { return Bodies; }
+    // Replaces every body (positions, velocities, masses), e.g. to restore a snapshot.
+    void SetStates(const std::vector<FMassiveBodyState>& States);
 
     // Kinetic + gravitational potential energy (J). Diagnostic: bounded
     // oscillation under Leapfrog, secular drift would indicate a bug.

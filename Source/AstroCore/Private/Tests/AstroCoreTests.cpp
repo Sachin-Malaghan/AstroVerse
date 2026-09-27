@@ -2,6 +2,7 @@
 // Run: UnrealEditor-Cmd AstroVerse.uproject -ExecCmds="Automation RunTests AstroVerse.Core; Quit"
 #include "Misc/AutomationTest.h"
 #include "Math/AstroVector3d.h"
+#include "Physics/KeplerOrbit.h"
 #include "Physics/NBodyIntegrator.h"
 #include "Time/SimClock.h"
 #include <cmath>
@@ -158,6 +159,45 @@ bool FAstroSimClockTest::RunTest(const FString& Parameters)
     Clock.SetTimeScale(-86400.0);
     Clock.Advance(0.5);
     TestEqual(TEXT("Negative scale rewinds"), Clock.GetSimulatedSeconds(), 2.0);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAstroKeplerRoundTripTest, "AstroVerse.Core.Kepler.RoundTrip", AstroCoreTests::Flags)
+bool FAstroKeplerRoundTripTest::RunTest(const FString& Parameters)
+{
+    // Elements -> state -> elements -> state must reproduce the state, across eccentricities and inclinations.
+    const double Mu = FNBodyIntegrator::GravitationalConstant * AstroCoreTests::SunMass;
+    const double Eccentricities[] = { 0.0, 0.0167, 0.2056, 0.6, 0.95 };
+    const double Inclinations[] = { 0.0, 0.1, 1.2, 3.0 };
+    double WorstMeters = 0.0;
+    for (double Ecc : Eccentricities)
+    {
+        for (double Inc : Inclinations)
+        {
+            FKeplerElements E;
+            E.SemiMajorAxis = 1.3 * AstroCoreTests::AU;
+            E.Eccentricity = Ecc;
+            E.Inclination = Inc;
+            E.LongitudeOfAscendingNode = 0.7;
+            E.ArgumentOfPeriapsis = 2.1;
+            E.MeanAnomalyAtEpoch = 4.0;
+            for (double T : { 0.0, 1.0e7, -3.3e7 })
+            {
+                const FOrbitalState S1 = KeplerOrbit::StateAtTime(E, Mu, T);
+                const FKeplerElements Fit = KeplerOrbit::ElementsFromState(S1, Mu, T);
+                const FOrbitalState S2 = KeplerOrbit::StateAtTime(Fit, Mu, T + 5.0e6);
+                const FOrbitalState S1Later = KeplerOrbit::StateAtTime(E, Mu, T + 5.0e6);
+                WorstMeters = FMath::Max(WorstMeters, (S2.Position - S1Later.Position).Length());
+            }
+        }
+    }
+    AddInfo(FString::Printf(TEXT("Worst round-trip position error: %.3f m"), WorstMeters));
+    TestTrue(TEXT("Kepler round trip within 1 km at 1.3 AU"), WorstMeters < 1000.0);
+
+    // Kepler period matches the N-body circular orbit period.
+    FKeplerElements Circular;
+    Circular.SemiMajorAxis = AstroCoreTests::AU;
+    TestEqual(TEXT("Kepler period (days)"), KeplerOrbit::OrbitalPeriod(Circular, Mu) / 86400.0, 365.25, 0.1);
     return true;
 }
 
