@@ -4,7 +4,12 @@
 // so AstroCore's math stays engine-agnostic and unit-testable outside Unreal.
 // See CLAUDE.md Phase 1.
 
-struct FAstroVector3d
+// UBT defines this for Unreal builds; fall back to nothing for standalone tests.
+#ifndef ASTROCORE_API
+#define ASTROCORE_API
+#endif
+
+struct ASTROCORE_API FAstroVector3d
 {
     double X = 0.0;
     double Y = 0.0;
@@ -15,7 +20,19 @@ struct FAstroVector3d
 
     FAstroVector3d operator+(const FAstroVector3d& Other) const;
     FAstroVector3d operator-(const FAstroVector3d& Other) const;
+    FAstroVector3d operator-() const;
     FAstroVector3d operator*(double Scalar) const;
+    FAstroVector3d operator/(double Scalar) const;
+    FAstroVector3d& operator+=(const FAstroVector3d& Other);
+    FAstroVector3d& operator-=(const FAstroVector3d& Other);
+    FAstroVector3d& operator*=(double Scalar);
+
+    double Dot(const FAstroVector3d& Other) const;
+    FAstroVector3d Cross(const FAstroVector3d& Other) const;
+    double LengthSquared() const;
     double Length() const;
+    // Returns the zero vector for a zero-length input rather than dividing by zero.
     FAstroVector3d Normalized() const;
 };
+
+inline FAstroVector3d operator*(double Scalar, const FAstroVector3d& Vector) { return Vector * Scalar; }

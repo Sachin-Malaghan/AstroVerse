@@ -4,7 +4,11 @@
 // Every module reads simulated time from here — never wall-clock time.
 // See CLAUDE.md Phase 1 and Phase 3.
 
-class FSimClock
+#ifndef ASTROCORE_API
+#define ASTROCORE_API
+#endif
+
+class ASTROCORE_API FSimClock
 {
 public:
     double GetSimulatedSeconds() const { return SimulatedSeconds; }

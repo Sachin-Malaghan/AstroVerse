@@ -10,6 +10,23 @@ A production-grade C++ solar system simulator in Unreal Engine: true physical sc
 
 **Unreal Engine itself is not installed by this repo and cannot be installed by you.** It requires a human to log into the Epic Games Launcher, accept the EULA, and download a 30–100GB engine build through a GUI installer — see `SETUP.md`. Do not attempt to invoke `UnrealBuildTool`, open the `.uproject`, or run any engine binary until the person confirms Unreal Engine 5.4+ and Visual Studio 2022 (with the "Game development with C++" workload) are installed. If asked to build or run the project before that's confirmed, say so plainly and point to `SETUP.md` instead of attempting it.
 
+## Build and test commands (UE 5.8 Launcher build, Windows)
+
+Launcher engine builds do not ship `GenerateProjectFiles.bat`; drive UnrealBuildTool through `Build.bat` instead. Engine root: `C:Program FilesEpic GamesUE_5.8`.
+
+```
+# Regenerate AstroVerse.sln (after adding/removing source files or modules)
+"<Engine>EngineBuildBatchFilesBuild.bat" -projectfiles -project="<repo>AstroVerse.uproject" -game -rocket -progress
+
+# Compile the editor target
+"<Engine>EngineBuildBatchFilesBuild.bat" AstroVerseEditor Win64 Development -project="<repo>AstroVerse.uproject" -waitmutex
+
+# Run AstroCore automation tests headless (results in Saved/Logs/Tests.log)
+"<Engine>EngineBinariesWin64UnrealEditor-Cmd.exe" "<repo>AstroVerse.uproject" -nullrhi -unattended -nosplash -nopause -ExecCmds="Automation RunTests AstroVerse.Core; Quit" -TestExit="Automation Test Queue Empty" -log=Tests.log
+```
+
+OpenXR "failed to find active runtime" errors in headless runs are expected when no headset runtime is installed.
+
 ## Non-negotiable architecture rule
 
 Four layers, strictly one-directional dependency:
@@ -64,8 +81,8 @@ One system, three tiers (`EFidelityTier` in `AstroActivation`):
 
 Do not start a phase until the previous one compiles and the relevant module's classes are wired together. Check items off in this file as you complete them.
 
-- [ ] **Phase 0 — Environment.** Manual, human-only. See `SETUP.md`. Confirm before doing anything else.
-- [ ] **Phase 1 — AstroCore.** Implement `FAstroVector3d` operators, `LeapfrogSolver::KickDriftKick`, `FNBodyIntegrator::Step`, `FSimClock::Advance`.
+- [x] **Phase 0 — Environment.** Manual, human-only. See `SETUP.md`. Confirm before doing anything else.
+- [x] **Phase 1 — AstroCore.** Implement `FAstroVector3d` operators, `LeapfrogSolver::KickDriftKick`, `FNBodyIntegrator::Step`, `FSimClock::Advance`.
 - [ ] **Phase 2 — AstroBodies.** Implement `FBodyRegistry::LoadFromDataTables`; author `DT_Planets.csv` with real masses/radii/orbital elements for the Sun + 8 planets; wire `ACelestialBody::Tick` to read integrator output.
 - [ ] **Phase 3 — AstroTime.** Implement `UTimeController` play/pause/rewind/timescale; confirm every Phase 1-2 class reads time from here, not `GetWorld()`.
 - [ ] **Phase 4 — Minimal proof-of-motion scene.** Placeholder spheres orbiting correctly in `L_SolarSystem`, no art pass yet — this validates the physics visually before any rendering investment.
