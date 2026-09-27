@@ -15,7 +15,7 @@ public class AstroBodies : ModuleRules
             "AstroTime"  // same (Simulation) layer: bodies advance off the god-mode clock
         });
 
-        PrivateDependencyModuleNames.AddRange(new string[] { });
+        PrivateDependencyModuleNames.AddRange(new string[] { "ImageWrapper" });
 
         // Layer rule: this module may only depend on modules in its own
         // architecture layer or below (see CLAUDE.md). Do not add a

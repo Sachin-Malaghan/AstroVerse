@@ -87,7 +87,20 @@ bool FBodyRegistry::LoadFromCSVDirectory(const FString& Directory, FString& OutE
     {
         return false;
     }
-    return LoadFromDataTables(Planets, Moons, OutError);
+    if (!LoadFromDataTables(Planets, Moons, OutError))
+    {
+        return false;
+    }
+
+    FString TerrainCSV;
+    if (FFileHelper::LoadFileToString(TerrainCSV, *FPaths::Combine(Directory, TEXT("DT_Terrain.csv"))))
+    {
+        UDataTable* Terrain = NewObject<UDataTable>(GetTransientPackage());
+        Terrain->RowStruct = FAstroTerrainRow::StaticStruct();
+        Terrain->CreateTableFromCSVString(TerrainCSV);
+        LoadTerrain(Terrain, FPaths::ProjectContentDir());
+    }
+    return true;
 }
 
 bool FBodyRegistry::AddRows(const UDataTable* Table, FString& OutError)
@@ -218,6 +231,22 @@ bool FBodyRegistry::Resolve(FString& OutError)
 
     Rows.Reset();
     return true;
+}
+
+void FBodyRegistry::LoadTerrain(const UDataTable* TerrainTable, const FString& ContentDir)
+{
+    if (!TerrainTable || TerrainTable->GetRowStruct() != FAstroTerrainRow::StaticStruct())
+    {
+        return;
+    }
+    for (FBodyDefinition& Body : Bodies)
+    {
+        if (const FAstroTerrainRow* Row = TerrainTable->FindRow<FAstroTerrainRow>(Body.BodyID, TEXT("FBodyRegistry::LoadTerrain"), false))
+        {
+            Body.Terrain = MakeShared<FBodyTerrain>();
+            Body.Terrain->Initialize(*Row, Body.BodyID, Body.EquatorialRadiusMeters, Body.PolarRadiusMeters, ContentDir);
+        }
+    }
 }
 
 int32 FBodyRegistry::FindIndex(FName BodyID) const

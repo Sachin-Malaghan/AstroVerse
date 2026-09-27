@@ -3,6 +3,7 @@
 #include "BodyDataRow.h"
 #include "Math/AstroMatrix3d.h"
 #include "Physics/KeplerOrbit.h"
+#include "BodyTerrain.h"
 // Data-driven registry: loads real orbital elements/masses from
 // Content/Bodies/DataTables into engine-agnostic body definitions.
 // Spawning actors is UAstroSimulationSubsystem's job. See CLAUDE.md Phase 2.
@@ -38,6 +39,9 @@ struct ASTROBODIES_API FBodyDefinition
 
     FString Notes;
 
+    // Surface model; null until terrain data is loaded (LoadTerrain).
+    TSharedPtr<FBodyTerrain> Terrain;
+
     double GetMeanRadiusMeters() const { return (2.0 * EquatorialRadiusMeters + PolarRadiusMeters) / 3.0; }
     // Body-fixed -> ecliptic orientation at the given sim time.
     FAstroMatrix3d GetOrientationAt(double SimSeconds) const;
@@ -50,8 +54,12 @@ public:
     // OutError on missing parents, duplicate IDs, or non-physical values.
     bool LoadFromDataTables(const UDataTable* PlanetTable, const UDataTable* MoonTable, FString& OutError);
 
-    // Dev/test path: builds transient Data Tables from the CSV sources in Directory.
+    // Dev/test path: builds transient Data Tables from the CSV sources in Directory
+    // (DT_Planets, DT_Moons, and DT_Terrain when present).
     bool LoadFromCSVDirectory(const FString& Directory, FString& OutError);
+
+    // Attaches terrain models from a DT_Terrain-style table; bodies without a row get none.
+    void LoadTerrain(const UDataTable* TerrainTable, const FString& ContentDir);
 
     int32 Num() const { return Bodies.Num(); }
     const FBodyDefinition& Get(int32 Index) const { return Bodies[Index]; }

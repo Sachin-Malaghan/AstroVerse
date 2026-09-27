@@ -11,6 +11,7 @@ public class AstroInput : ModuleRules
             "CoreUObject",
             "Engine",
             "EnhancedInput",
+            "InputCore",
             "HeadMountedDisplay",
             "AstroCore"
         });

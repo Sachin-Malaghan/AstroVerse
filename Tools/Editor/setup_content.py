@@ -65,6 +65,8 @@ def import_data_tables():
     for name in ("DT_Planets", "DT_Moons"):
         import_csv_table(os.path.join(PROJECT_CONTENT, "Bodies", "DataTables", name + ".csv"),
                          "/Game/Bodies/DataTables", name, "/Script/AstroBodies.AstroBodyDataRow")
+    import_csv_table(os.path.join(PROJECT_CONTENT, "Bodies", "DataTables", "DT_Terrain.csv"),
+                     "/Game/Bodies/DataTables", "DT_Terrain", "/Script/AstroBodies.AstroTerrainRow")
     import_csv_table(os.path.join(PROJECT_CONTENT, "Rendering", "DataTables", "DT_Appearance.csv"),
                      "/Game/Rendering/DataTables", "DT_Appearance", "/Script/AstroRendering.AstroBodyAppearanceRow")
 
@@ -298,6 +300,38 @@ def build_planet_surface():
     return m
 
 
+def build_terrain_surface():
+    """Lit close-range terrain: engine lighting + shadows near the camera (Phase 8)."""
+    m = fresh_material("M_TerrainSurface")
+    g = Graph(m)
+    uv0 = g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0)
+    uv1 = g.mask(g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=1), True, False, False, False)
+    direction = g.node(unreal.MaterialExpressionAppendVector, x=-900)
+    MEL.connect_material_expressions(uv0, "", direction, "A")
+    MEL.connect_material_expressions(uv1, "", direction, "B")
+    inputs = {
+        "Dir": direction,
+        "LocalPos": g.local_pos(),
+        "DayTex": g.texture("DayTex", WHITE),
+        "SpecTex": g.texture("SpecTex", BLACK),
+        "Tint": g.vector("Tint", (1, 1, 1, 1)),
+        "Procedural": g.scalar("Procedural", 0.0),
+        "SpecAmount": g.scalar("SpecAmount", 0.0),
+    }
+    c = g.custom("TerrainSurface.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT4)
+    g.wire(c, inputs)
+    MEL.connect_material_property(g.mask(c, True, True, True, False), "", unreal.MaterialProperty.MP_BASE_COLOR)
+    ocean = g.mask(c, False, False, False, True)
+    rough = g.node(unreal.MaterialExpressionLinearInterpolate, x=-150, const_a=0.9, const_b=0.12)
+    MEL.connect_material_expressions(ocean, "", rough, "Alpha")
+    MEL.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    spec = g.node(unreal.MaterialExpressionLinearInterpolate, x=-150, const_a=0.35, const_b=0.6)
+    MEL.connect_material_expressions(ocean, "", spec, "Alpha")
+    MEL.connect_material_property(spec, "", unreal.MaterialProperty.MP_SPECULAR)
+    finish(m)
+    return m
+
+
 def build_atmosphere():
     m = fresh_material("M_AtmosphereShell")
     m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
@@ -489,14 +523,8 @@ def build_level():
     else:
         les.new_level(level_path)
 
-    # View camera at the engine origin (= the floating render origin). Phase 8 replaces it with pawns.
-    # Exposure, stars and sunlight come from AAstroSpaceEnvironment at runtime.
-    camera = eas.spawn_actor_from_class(unreal.CameraActor, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
-    camera.set_actor_label("ObserverCamera")
-    camera.set_editor_property("auto_activate_for_player", unreal.AutoReceiveInput.PLAYER0)
-    cam_comp = camera.get_editor_property("camera_component")
-    cam_comp.set_editor_property("field_of_view", 60.0)
-    cam_comp.set_editor_property("constrain_aspect_ratio", False)
+    # Empty on purpose: AAstroGameMode spawns the flycam / VR pawn, the simulation spawns
+    # the bodies, and AstroRendering spawns the environment and terrain at runtime.
 
     les.save_current_level()
     log("Built " + level_path)
@@ -507,6 +535,7 @@ import_textures()
 build_sphere_mesh()
 surface = build_planet_surface()
 atmosphere = build_atmosphere()
+terrain_surface = build_terrain_surface()
 rings = build_rings()
 sun = build_sun_surface()
 corona = build_corona()

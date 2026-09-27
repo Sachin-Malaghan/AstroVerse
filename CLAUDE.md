@@ -95,7 +95,7 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - [x] **Phase 5 — AstroActivation.** Implement `FActivationManager` tier promotion/demotion, the 3-lock cap with demotion-of-oldest, reference-frame handling.
 - [x] **Phase 6 — AstroRendering.** Corona/flare, atmospheric scattering, ring shaders; split Lumen/Nanite budgets per platform (desktop full, VR trimmed for 90Hz).
 - [x] **Phase 7 — Scale and precision infrastructure.** Confirm floating-origin behavior at true scale; build the Solar-System ↔ Galaxy scale-domain transition.
-- [ ] **Phase 8 — AstroInput + AstroApp pawns.** Desktop flycam pawn first, then VR pawn with room-scale/teleport locomotion.
+- [x] **Phase 8 — AstroInput + AstroApp pawns.** Desktop flycam pawn first, then VR pawn with room-scale/teleport locomotion.
 - [ ] **Phase 9 — AstroTravel.** Cinematic warp and player-piloted ship, user-selectable; clock-during-transit is a user setting. See "Decided — travel" below.
 - [ ] **Phase 10 — AstroGalaxy.** Milky Way disc representation, Sun position/velocity marker, scale-domain transition polish.
 - [ ] **Phase 11 — AstroUI.** God-mode time HUD, teaching-mode facts panels, VR world-space diegetic panels.
@@ -121,6 +121,13 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - Planet textures: Solar System Scope, CC BY 4.0 — the credits screen must show "Planet textures by Solar System Scope (solarsystemscope.com), CC BY 4.0" (see SourceArt/Textures/SolarSystemScope/ATTRIBUTION.md).
 - Galilean moons, Titan, Phobos, Deimos are procedural until maps are sourced.
 
+## Surfaces and locomotion (Phase 8)
+
+- `FBodyTerrain` (AstroBodies, `DT_Terrain.csv`) is the single height model: the walker stands on it and `AAstroTerrainActor`'s clipmap draws it, so what you see is what you stand on. Relief is procedural (fBm + micro-relief + Pike-law craters) until real DEMs are sourced; `HeightmapFile` / `OceanMaskFile` take equirect images from `Content/Bodies/Terrain/` (staged as non-UFS).
+- Gas and ice giants have no solid surface: you can fly down to the cloud tops but not land or walk there (design decision, 2026-09-27).
+- Pawns: shared `AAstroPawnBase` — reference body by sphere of influence, inertial frame in space, co-rotating frame below 100 km, altitude-scaled flight, kinematic walking with each body's real surface gravity. `AAstroGameMode` picks `AAstroVRPawn` when a headset is active. The VR pawn is built but untested without a headset.
+
 ## Open items not yet scoped
+
 
 - Asteroid belt representation: GPU-instanced/Niagara-driven per the fidelity system (never individually N-body simulated), but the exact rendering approach isn't decided.

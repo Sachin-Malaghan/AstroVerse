@@ -8,6 +8,7 @@
 // (desktop: Lumen/VSM/TSR; VR: trimmed for 90 Hz). See CLAUDE.md Phase 6.
 
 class AAstroSpaceEnvironment;
+class AAstroTerrainActor;
 
 UCLASS()
 class ASTRORENDERING_API UAstroRenderingSubsystem : public UTickableWorldSubsystem
@@ -22,6 +23,7 @@ public:
     static UAstroRenderingSubsystem* Get(const UObject* WorldContext);
 
     AAstroSpaceEnvironment* GetEnvironment() const { return Environment.Get(); }
+    AAstroTerrainActor* GetTerrain() const { return Terrain.Get(); }
     bool IsVRBudgetActive() const { return bVRBudget; }
 
     // Re-applies the budget for the current device (call after toggling stereo).
@@ -33,6 +35,7 @@ private:
 
     TMap<FName, FAstroBodyAppearanceRow> Appearance;
     TWeakObjectPtr<AAstroSpaceEnvironment> Environment;
+    TWeakObjectPtr<AAstroTerrainActor> Terrain;
     bool bDecorated = false;
     bool bVRBudget = false;
 };

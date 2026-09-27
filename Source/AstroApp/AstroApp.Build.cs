@@ -11,6 +11,8 @@ public class AstroApp : ModuleRules
             "CoreUObject",
             "Engine",
             "InputCore",
+            "EnhancedInput",
+            "HeadMountedDisplay",
             "AstroCore",
             "AstroBodies",
             "AstroTime",

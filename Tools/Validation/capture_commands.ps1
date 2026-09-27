@@ -19,7 +19,9 @@ Get-ChildItem "$ShotDir\*.png" -ErrorAction SilentlyContinue | Remove-Item
 $cmds = @($Setup -split ";" | Where-Object { $_ })
 $t = 4.0
 foreach ($shot in ($Shots -split '\|')) {
-    foreach ($c in ($shot -split ";")) { if ($c.Trim()) { $cmds += "astro.Debug.DelayedExec $t $($c.Trim())" } }
+    # Stagger commands within a shot so each sees the previous one's effect (next frame).
+    $k = 0
+    foreach ($c in ($shot -split ";")) { if ($c.Trim()) { $cmds += "astro.Debug.DelayedExec $($t + 0.3 * $k) $($c.Trim())"; $k++ } }
     $t += $SettleSeconds
     $cmds += "astro.Debug.DelayedExec $t shot"
     $t += 1.0

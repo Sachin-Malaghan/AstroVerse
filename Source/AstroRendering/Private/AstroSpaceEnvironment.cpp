@@ -6,6 +6,7 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/PostProcessComponent.h"
 #include "Components/SkyAtmosphereComponent.h"
+#include "Components/SkyLightComponent.h"
 #include "AstroBody.h"
 #include "BodyShadingComponent.h"
 #include "Engine/World.h"
@@ -65,6 +66,14 @@ AAstroSpaceEnvironment::AAstroSpaceEnvironment()
     SkyAtmosphere->SetUsingAbsoluteLocation(true);
     SkyAtmosphere->TransformMode = ESkyAtmosphereTransformMode::PlanetCenterAtComponentTransform;
     SkyAtmosphere->SetVisibility(false);
+
+    SkyLight = CreateDefaultSubobject<USkyLightComponent>(TEXT("SkyLight"));
+    SkyLight->SetupAttachment(PostProcess);
+    SkyLight->SetMobility(EComponentMobility::Movable);
+    SkyLight->bRealTimeCapture = true;
+    SkyLight->SetIntensity(1.0f);
+    // The stars must not light the ground: capture only the atmosphere (and nothing when there is none).
+    SkyLight->bLowerHemisphereIsBlack = true;
 }
 
 void AAstroSpaceEnvironment::BeginPlay()

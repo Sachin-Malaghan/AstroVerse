@@ -22,6 +22,10 @@ public:
     UPROPERTY(Config, EditAnywhere, Category = "Data")
     TSoftObjectPtr<UDataTable> MoonTable;
 
+    // Row struct FAstroTerrainRow. Heightmap/ocean-mask files are read from Content at runtime.
+    UPROPERTY(Config, EditAnywhere, Category = "Data")
+    TSoftObjectPtr<UDataTable> TerrainTable;
+
     // Used when the table assets above are unset: CSV sources, relative to the project Content folder.
     UPROPERTY(Config, EditAnywhere, Category = "Data")
     FString CSVFallbackDirectory = TEXT("Bodies/DataTables");

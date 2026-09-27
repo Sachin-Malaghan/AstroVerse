@@ -1,6 +1,7 @@
 // Developer commands for scripted validation runs (screenshots, camera aim). See CLAUDE.md Phase 4.
 #include "HAL/IConsoleManager.h"
 #include "AstroSimulationSubsystem.h"
+#include "AstroPawnBase.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Containers/Ticker.h"
@@ -10,10 +11,31 @@
 
 namespace
 {
-    ACameraActor* ViewCamera(UWorld* World)
+    // The possessed pawn, or a level camera when nothing is possessed.
+    AActor* ViewActor(UWorld* World)
     {
         APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
-        return PC ? Cast<ACameraActor>(PC->GetViewTarget()) : nullptr;
+        if (!PC)
+        {
+            return nullptr;
+        }
+        return PC->GetPawn() ? static_cast<AActor*>(PC->GetPawn()) : PC->GetViewTarget();
+    }
+
+    UCameraComponent* ViewCameraComponent(UWorld* World)
+    {
+        AActor* Actor = ViewActor(World);
+        return Actor ? Actor->FindComponentByClass<UCameraComponent>() : nullptr;
+    }
+
+    // Places the view actor at the engine origin with a rotation, stopping any pawn motion.
+    void PlaceView(AActor* Actor, const FRotator& Rotation)
+    {
+        Actor->SetActorLocationAndRotation(FVector::ZeroVector, Rotation);
+        if (AAstroPawnBase* Pawn = Cast<AAstroPawnBase>(Actor))
+        {
+            Pawn->StopMotion();
+        }
     }
 
     // e.g. astro.Debug.DelayedExec 5 HighResShot 1920x1080 -- lets -ExecCmds script a timed run.
@@ -54,14 +76,14 @@ namespace
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
         {
             UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(World);
-            ACameraActor* Camera = ViewCamera(World);
+            AActor* View = ViewActor(World);
             const int32 Body = Sim && Args.Num() > 0 ? Sim->FindBodyIndex(FName(*Args[0])) : INDEX_NONE;
-            if (!Camera || Body == INDEX_NONE)
+            if (!View || Body == INDEX_NONE)
             {
                 return;
             }
             const FVector Target = Sim->SimToScaledEnginePosition(Sim->GetSimulation().GetBodyState(Body).Position);
-            Camera->SetActorRotation((Target - Camera->GetActorLocation()).Rotation());
+            View->SetActorRotation((Target - View->GetActorLocation()).Rotation());
         }));
 
     // Rodrigues rotation of V about unit Axis.
@@ -78,9 +100,9 @@ namespace
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
         {
             UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(World);
-            ACameraActor* Camera = ViewCamera(World);
+            AActor* View = ViewActor(World);
             const int32 Body = Sim && Args.Num() >= 2 ? Sim->FindBodyIndex(FName(*Args[0])) : INDEX_NONE;
-            if (!Camera || Body == INDEX_NONE)
+            if (!View || Body == INDEX_NONE)
             {
                 return;
             }
@@ -102,9 +124,8 @@ namespace
 
             const double Distance = Radii * Registry.Get(Body).EquatorialRadiusMeters;
             Sim->SetRenderOriginAnchor(Body, Dir * Distance);
-            Camera->SetActorLocation(FVector::ZeroVector);
             // Aim along the true direction (direction is preserved by scaled space).
-            Camera->SetActorRotation(Sim->SimToEngineDirection(-Dir).Rotation());
+            PlaceView(View, Sim->SimToEngineDirection(-Dir).Rotation());
         }));
 
     // Engine axes in a landed frame: +X east, -Y north, +Z up. Yaw 0 = east, -90 = north.
@@ -112,11 +133,71 @@ namespace
         TEXT("astro.Camera.Look"), TEXT("astro.Camera.Look <yaw_deg> <pitch_deg> - aim the view camera in engine axes"),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
         {
-            ACameraActor* Camera = ViewCamera(World);
-            if (Camera && Args.Num() >= 2)
+            AActor* View = ViewActor(World);
+            if (View && Args.Num() >= 2)
             {
-                Camera->SetActorLocation(FVector::ZeroVector);
-                Camera->SetActorRotation(FRotator(FCString::Atod(*Args[1]), FCString::Atod(*Args[0]), 0.0));
+                PlaceView(View, FRotator(FCString::Atod(*Args[1]), FCString::Atod(*Args[0]), 0.0));
+            }
+        }));
+
+    // astro.Origin.LandSun Moon 8 2 -- stand where the Sun is 8 deg above the horizon, 2 m up,
+    // facing across the light so relief and shadows read well.
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdOriginLandSun(
+        TEXT("astro.Origin.LandSun"), TEXT("astro.Origin.LandSun <BodyID> <sun_elevation_deg> [altitude_m=2] [view_pitch_deg=-8]"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(World);
+            AActor* View = ViewActor(World);
+            const int32 Body = Sim && Args.Num() >= 2 ? Sim->FindBodyIndex(FName(*Args[0])) : INDEX_NONE;
+            if (!View || Body == INDEX_NONE)
+            {
+                return;
+            }
+            const double Elevation = FMath::DegreesToRadians(FCString::Atod(*Args[1]));
+            const double Altitude = Args.Num() > 2 ? FCString::Atod(*Args[2]) : 2.0;
+            const double Pitch = Args.Num() > 3 ? FCString::Atod(*Args[3]) : -8.0;
+            const FBodyDefinition& Def = Sim->GetRegistry().Get(Body);
+            const FAstroMatrix3d SimToBody = Def.GetOrientationAt(Sim->GetSimulation().GetSimSeconds()).Transposed();
+            const FAstroVector3d SunBF = (SimToBody * (Sim->GetSimulation().GetBodyState(Sim->GetRegistry().GetStarIndex()).Position
+                                                      - Sim->GetSimulation().GetBodyState(Body).Position)).Normalized();
+            // Walk from the subsolar point toward a pole by (90 - elevation) degrees.
+            FAstroVector3d Axis = SunBF.Cross(FAstroVector3d(0, 0, 1)).Normalized();
+            if (Axis.LengthSquared() < 0.5)
+            {
+                Axis = FAstroVector3d(1, 0, 0);
+            }
+            const double Angle = UE_HALF_PI - Elevation;
+            const FAstroVector3d Dir = (SunBF * FMath::Cos(Angle) + Axis.Cross(SunBF) * FMath::Sin(Angle)).Normalized();
+            const double Ground = Def.Terrain.IsValid() ? Def.Terrain->EllipsoidRadius(Dir) + Def.Terrain->HeightAt(Dir, 0.5) : Def.EquatorialRadiusMeters;
+            Sim->SetRenderOriginBodyFixed(Body, Dir * (Ground + Altitude));
+            // Face 90 deg from the Sun's azimuth: side light.
+            const FVector SunEngine = Sim->SimToEngineDirection(Def.GetOrientationAt(Sim->GetSimulation().GetSimSeconds()) * SunBF);
+            const double SunYaw = FMath::RadiansToDegrees(FMath::Atan2(SunEngine.Y, SunEngine.X));
+            PlaceView(View, FRotator(Pitch, SunYaw + 90.0, 0.0));
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdPawnStatus(
+        TEXT("astro.Pawn.Status"), TEXT("Print the pawn's locomotion, reference body, frame, altitude and speed"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+        {
+            const AAstroPawnBase* Pawn = Cast<AAstroPawnBase>(ViewActor(World));
+            const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(World);
+            if (Pawn && Sim)
+            {
+                UE_LOG(LogTemp, Display, TEXT("Pawn: %s near %s, %s frame, altitude %.2f m, speed %.2f m/s"),
+                    Pawn->GetLocomotion() == EAstroLocomotion::Walking ? TEXT("walking") : TEXT("flying"),
+                    *Pawn->GetReferenceBody().ToString(), Sim->IsRotatingFrame() ? TEXT("co-rotating") : TEXT("inertial"),
+                    Pawn->GetAltitude(), Pawn->GetSpeedMetersPerSecond());
+            }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdPawnLand(
+        TEXT("astro.Pawn.Land"), TEXT("Land the pawn (walk) if low over a solid surface, or take off"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+        {
+            if (AAstroPawnBase* Pawn = Cast<AAstroPawnBase>(ViewActor(World)))
+            {
+                Pawn->ToggleLanding();
             }
         }));
 
@@ -124,9 +205,9 @@ namespace
         TEXT("astro.Camera.LookDown"), TEXT("Aim the view camera straight down the ecliptic pole"),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
         {
-            if (ACameraActor* Camera = ViewCamera(World))
+            if (AActor* View = ViewActor(World))
             {
-                Camera->SetActorRotation(FRotator(-90.0, 0.0, 0.0));
+                PlaceView(View, FRotator(-90.0, 0.0, 0.0));
             }
         }));
 
@@ -134,10 +215,10 @@ namespace
         TEXT("astro.Camera.FOV"), TEXT("astro.Camera.FOV <degrees>"),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
         {
-            ACameraActor* Camera = ViewCamera(World);
+            UCameraComponent* Camera = ViewCameraComponent(World);
             if (Camera && Args.Num() > 0)
             {
-                Camera->GetCameraComponent()->SetFieldOfView(FCString::Atof(*Args[0]));
+                Camera->SetFieldOfView(FCString::Atof(*Args[0]));
             }
         }));
 }

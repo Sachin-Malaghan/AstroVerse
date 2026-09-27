@@ -36,6 +36,10 @@ public:
     UPROPERTY(Config, EditAnywhere, Category = "Materials")
     TSoftObjectPtr<UMaterialInterface> StarFieldMaterial;
 
+    // Lit close-range terrain (AAstroTerrainActor); inherits each body's maps.
+    UPROPERTY(Config, EditAnywhere, Category = "Materials")
+    TSoftObjectPtr<UMaterialInterface> TerrainMaterial;
+
     // Fallback surface for bodies with no appearance row.
     UPROPERTY(Config, EditAnywhere, Category = "Materials")
     TSoftObjectPtr<UMaterialInterface> DefaultSurfaceMaterial;

@@ -41,6 +41,10 @@ void UAstroSimulationSubsystem::OnWorldBeginPlay(UWorld& InWorld)
     if (!Settings->PlanetTable.IsNull())
     {
         bLoaded = Registry.LoadFromDataTables(Settings->PlanetTable.LoadSynchronous(), Settings->MoonTable.LoadSynchronous(), LoadError);
+        if (bLoaded)
+        {
+            Registry.LoadTerrain(Settings->TerrainTable.LoadSynchronous(), FPaths::ProjectContentDir());
+        }
     }
     else
     {

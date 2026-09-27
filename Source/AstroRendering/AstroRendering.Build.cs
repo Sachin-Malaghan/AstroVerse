@@ -15,6 +15,7 @@ public class AstroRendering : ModuleRules
             "RenderCore",
             "RHI",
             "Niagara",
+            "ProceduralMeshComponent",
             "AstroCore",
             "AstroBodies",
             "AstroActivation"

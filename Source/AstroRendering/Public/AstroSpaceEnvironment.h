@@ -10,6 +10,7 @@
 
 class UPostProcessComponent;
 class USkyAtmosphereComponent;
+class USkyLightComponent;
 class UBodyShadingComponent;
 class UAstroSimulationSubsystem;
 class UMaterialInstanceDynamic;
@@ -32,6 +33,11 @@ public:
     // atmosphere the camera is in or near; far bodies keep their shell. Phase 7.
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|Environment")
     TObjectPtr<USkyAtmosphereComponent> SkyAtmosphere;
+
+    // Ambient from the sky (real-time capture): a sunlit atmosphere fills shadows; airless
+    // bodies capture a black sky, so their shadows stay hard and dark, as they really are.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|Environment")
+    TObjectPtr<USkyLightComponent> SkyLight;
 
     // The body SkyAtmosphere is currently rendering, or INDEX_NONE.
     int32 GetSkyBodyIndex() const { return SkyBodyIndex; }
