@@ -368,5 +368,11 @@ void AAstroTerrainActor::SetupMaterial(int32 BodyIndex)
         {
             TerrainMID->SetVectorParameterValue(TEXT("Tint"), Tint);
         }
+        // Geodetic maps: the terrain's geocentric directions need (A/C)^2 (see AstroGeodesy.h).
+        const FBodyDefinition& Def = Sim->GetRegistry().Get(BodyIndex);
+        if (Def.Terrain.IsValid() && Def.Terrain->UsesGeodeticLatitude())
+        {
+            TerrainMID->SetScalarParameterValue(TEXT("LatScale"), FMath::Square(Def.EquatorialRadiusMeters / Def.PolarRadiusMeters));
+        }
     }
 }

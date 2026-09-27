@@ -9,6 +9,8 @@
 // controller exists and feeds it the selection and viewer status. See CLAUDE.md Phase 11.
 
 class UAstroHUDWidget;
+DECLARE_MULTICAST_DELEGATE_FourParams(FOnAstroUISiteRequest, double, double, double, const FString&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnAstroUICommand, FName);
 class UAstroPauseMenuWidget;
 enum class EAstroScaleDomain : uint8;
 
@@ -27,11 +29,20 @@ public:
 
     void SetSelectedBody(FName BodyID);
     void SetViewerStatus(const FString& Status);
-    void ShowToast(const FString& Message);
+    void ShowToast(const FString& Message, float Seconds = 5.0f);
+    void ShowCaption(const FString& Title, const FString& Text, const FString& Footer);
+    void HideCaption();
+    UAstroHUDWidget* GetHUDWidget() const { return HUD; }
     void ToggleHUD();
     void ToggleHelp();
     void ToggleMenu();
     bool IsMenuOpen() const { return bMenuOpen; }
+    // Local-time zone for the HUD clock (a site's), or this computer's.
+    void SetSiteTimeZone(bool bEnabled, double UtcOffsetHours);
+
+    // Menu requests for the application layer (AstroApp binds these).
+    FOnAstroUISiteRequest OnSiteRequested;
+    FOnAstroUICommand OnCommand;
 
 private:
     void LoadFacts();

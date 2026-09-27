@@ -31,6 +31,14 @@ void UTimeController::Initialize(FSubsystemCollectionBase& Collection)
     Clock.SetSimulatedSeconds(DateTimeToSimSeconds(Start));
     Clock.SetTimeScale(Settings->StartTimeScale);
     Clock.SetPaused(Settings->bStartPaused);
+    if (Settings->bStartLive)
+    {
+        bLive = true;
+        Clock.SetSimulatedSeconds(DateTimeToSimSeconds(NetworkTime.UtcNow()));
+        Clock.SetTimeScale(1.0);
+        Clock.SetPaused(false);
+    }
+    RequestNetworkSync();
 
     TickStartHandle = FWorldDelegates::OnWorldTickStart.AddUObject(this, &UTimeController::HandleWorldTickStart);
 }
@@ -55,8 +63,50 @@ void UTimeController::HandleWorldTickStart(UWorld* World, ELevelTick TickType, f
     }
     const double Before = Clock.GetSimulatedSeconds();
     Clock.Advance(RealDeltaSeconds);
+    if (bLive)
+    {
+        // Track real UTC: slew small errors (frame-time jitter, a network correction),
+        // snap large ones (resuming from a game pause, a first sync far off).
+        const double Target = DateTimeToSimSeconds(NetworkTime.UtcNow());
+        const double Error = Target - Clock.GetSimulatedSeconds();
+        const double Correction = FMath::Abs(Error) > 2.0 ? Error : Error * FMath::Min(1.0, 2.0 * RealDeltaSeconds);
+        Clock.SetSimulatedSeconds(Clock.GetSimulatedSeconds() + Correction);
+    }
+    const UAstroTimeSettings* Settings = GetDefault<UAstroTimeSettings>();
+    if (Settings->bUseNetworkTime && FPlatformTime::Seconds() > NextNetworkSyncRealSeconds)
+    {
+        RequestNetworkSync(); // periodic: drift correction online, and a retry while offline
+    }
     const double After = Clock.GetSimulatedSeconds();
     OnSimTimeAdvanced.Broadcast(After, After - Before);
+}
+
+void UTimeController::GoLive()
+{
+    bLive = true;
+    Clock.SetTimeScale(1.0);
+    Clock.SetPaused(false);
+    const double Before = Clock.GetSimulatedSeconds();
+    const double Now = DateTimeToSimSeconds(NetworkTime.UtcNow());
+    Clock.SetSimulatedSeconds(Now);
+    OnSimTimeAdvanced.Broadcast(Now, Now - Before);
+    OnTimeControlsChanged.Broadcast();
+    RequestNetworkSync();
+}
+
+void UTimeController::LeaveLive()
+{
+    bLive = false;
+}
+
+void UTimeController::RequestNetworkSync()
+{
+    const UAstroTimeSettings* Settings = GetDefault<UAstroTimeSettings>();
+    if (Settings->bUseNetworkTime)
+    {
+        NetworkTime.RequestSync(Settings->NetworkTimeUrls);
+        NextNetworkSyncRealSeconds = FPlatformTime::Seconds() + Settings->NetworkResyncMinutes * 60.0;
+    }
 }
 
 void UTimeController::Play()
@@ -67,6 +117,7 @@ void UTimeController::Play()
 
 void UTimeController::Pause()
 {
+    LeaveLive();
     Clock.SetPaused(true);
     OnTimeControlsChanged.Broadcast();
 }
@@ -78,6 +129,10 @@ void UTimeController::TogglePause()
 
 void UTimeController::SetTimeScale(double SecondsSimulatedPerRealSecond)
 {
+    if (SecondsSimulatedPerRealSecond != 1.0)
+    {
+        LeaveLive();
+    }
     const double Limit = GetDefault<UAstroTimeSettings>()->MaxAbsTimeScale;
     Clock.SetTimeScale(FMath::Clamp(SecondsSimulatedPerRealSecond, -Limit, Limit));
     OnTimeControlsChanged.Broadcast();
@@ -131,6 +186,7 @@ void UTimeController::StepTimeScale(int32 Direction)
 
 void UTimeController::JumpToSimSeconds(double SimSecondsSinceJ2000)
 {
+    LeaveLive();
     const double Before = Clock.GetSimulatedSeconds();
     Clock.SetSimulatedSeconds(SimSecondsSinceJ2000);
     OnSimTimeAdvanced.Broadcast(SimSecondsSinceJ2000, SimSecondsSinceJ2000 - Before);

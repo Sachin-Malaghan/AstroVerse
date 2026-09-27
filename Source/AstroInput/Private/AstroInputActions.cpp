@@ -66,6 +66,12 @@ UAstroInputActions* UAstroInputActions::Create(UObject* Outer)
     A->Menu = MakeAction(A, TEXT("IA_Menu"), EInputActionValueType::Boolean);
     A->Menu->bTriggerWhenPaused = true; // the menu pauses the game and must be able to close
     A->Help = MakeAction(A, TEXT("IA_Help"), EInputActionValueType::Boolean);
+    A->Focus = MakeAction(A, TEXT("IA_Focus"), EInputActionValueType::Boolean);
+    A->Home = MakeAction(A, TEXT("IA_Home"), EInputActionValueType::Boolean);
+    A->GoLive = MakeAction(A, TEXT("IA_GoLive"), EInputActionValueType::Boolean);
+    A->Tour = MakeAction(A, TEXT("IA_Tour"), EInputActionValueType::Boolean);
+    A->TourNext = MakeAction(A, TEXT("IA_TourNext"), EInputActionValueType::Boolean);
+    A->MilkyWayGuide = MakeAction(A, TEXT("IA_MilkyWayGuide"), EInputActionValueType::Boolean);
 
     A->DesktopContext = NewObject<UInputMappingContext>(A, TEXT("IMC_Desktop"));
     A->VRContext = NewObject<UInputMappingContext>(A, TEXT("IMC_VR"));
@@ -162,5 +168,13 @@ void UAstroInputActions::BuildGlobal()
     Map(C, ToggleHUD, EKeys::H);
     Map(C, Menu, EKeys::Escape);
     Map(C, Help, EKeys::F1);
+    Map(C, Focus, EKeys::F);
+    Map(C, Focus, EKeys::Gamepad_FaceButton_Left);
+    Map(C, Home, EKeys::Home);
+    Map(C, Home, EKeys::BackSpace);
+    Map(C, GoLive, EKeys::L);
+    Map(C, Tour, EKeys::F2);
+    Map(C, TourNext, EKeys::N);
+    Map(C, MilkyWayGuide, EKeys::V);
     Map(C, Menu, EKeys::Gamepad_Special_Right);
 }

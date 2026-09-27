@@ -2,6 +2,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "Time/SimClock.h"
+#include "AstroNetworkTime.h"
 #include "TimeController.generated.h"
 // The single god-mode clock every other module reads from. See CLAUDE.md
 // Phase 3. Nothing outside this class queries wall-clock time directly.
@@ -23,6 +24,19 @@ public:
     virtual void Deinitialize() override;
 
     static UTimeController* Get(const UObject* WorldContext);
+
+    // Live mode: simulated time follows real UTC at 1x (network-corrected when online).
+    // Any manual time change (pause, speed, rewind, jump) leaves Live mode.
+    UFUNCTION(BlueprintCallable, Category = "Astro|Time")
+    void GoLive();
+
+    UFUNCTION(BlueprintPure, Category = "Astro|Time")
+    bool IsLive() const { return bLive; }
+
+    // Real UTC now (system clock + network offset). Only this controller reads the wall clock.
+    FDateTime GetRealUtcNow() const { return NetworkTime.UtcNow(); }
+    const FAstroNetworkTime& GetNetworkTime() const { return NetworkTime; }
+    void RequestNetworkSync();
 
     UFUNCTION(BlueprintCallable, Category = "Astro|Time")
     void Play();
@@ -84,6 +98,11 @@ public:
 private:
     void HandleWorldTickStart(UWorld* World, ELevelTick TickType, float RealDeltaSeconds);
 
+    void LeaveLive();
+
     FSimClock Clock;
+    FAstroNetworkTime NetworkTime;
+    bool bLive = false;
+    double NextNetworkSyncRealSeconds = 0.0;
     FDelegateHandle TickStartHandle;
 };

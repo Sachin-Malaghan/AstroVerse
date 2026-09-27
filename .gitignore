@@ -21,3 +21,4 @@ Config/UserEngine.ini
 # OS/editor noise
 .DS_Store
 Thumbs.db
+Content/Bodies/Terrain/DEM/

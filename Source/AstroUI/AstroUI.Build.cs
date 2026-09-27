@@ -20,6 +20,7 @@ public class AstroUI : ModuleRules
             "AstroActivation",
             "AstroTravel",
             "AstroGalaxy",
+            "AstroRendering",  // Presentation layer (below Application): site overlay data
             "AstroInput"
         });
 

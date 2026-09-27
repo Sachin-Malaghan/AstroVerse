@@ -9,6 +9,8 @@
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "Math/AstroConstants.h"
+#include "BodyTerrain.h"
+#include "AstroTourSubsystem.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAstroPawn, Log, All);
 
@@ -25,6 +27,227 @@ void AAstroPawnBase::BeginPlay()
 {
     Super::BeginPlay();
     SetActorLocation(FVector::ZeroVector);
+    if (UAstroTravelSubsystem* Travel = UAstroTravelSubsystem::Get(this))
+    {
+        Travel->OnTravelStarted.AddDynamic(this, &AAstroPawnBase::HandleTravelStarted);
+        Travel->OnTravelArrived.AddDynamic(this, &AAstroPawnBase::HandleTravelArrived);
+    }
+    if (UAstroTourSubsystem* Tour = UAstroTourSubsystem::Get(this))
+    {
+        Tour->OnCameraRequest.AddUObject(this, &AAstroPawnBase::HandleTourCamera);
+    }
+}
+
+void AAstroPawnBase::HandleTourCamera(FName BodyID, double DistanceRadii, double PhaseDeg, double ElevationDeg, double DriftDegPerSecond, bool bUseSide)
+{
+    SetOrbitDrift(DriftDegPerSecond);
+    if (BodyID.IsNone())
+    {
+        return; // tour ended: just stop the drift
+    }
+    if (bUseSide)
+    {
+        FocusOnFromSunSide(BodyID, DistanceRadii, PhaseDeg, ElevationDeg, false);
+    }
+    else
+    {
+        FocusOn(BodyID, DistanceRadii, false);
+    }
+}
+
+void AAstroPawnBase::HandleTravelStarted(FName BodyID)
+{
+    bOrbiting = false;
+}
+
+void AAstroPawnBase::HandleTravelArrived(FName BodyID)
+{
+    // Arrive in orbit around the destination: zoom and circle it straight away.
+    FocusOn(BodyID, 0.0, true);
+}
+
+FName AAstroPawnBase::GetOrbitBody() const
+{
+    const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    return bOrbiting && Sim && Sim->GetRegistry().GetAll().IsValidIndex(OrbitBody) ? Sim->GetRegistry().Get(OrbitBody).BodyID : NAME_None;
+}
+
+double AAstroPawnBase::SurfaceRadius(const UAstroSimulationSubsystem* Sim, int32 Body, const FAstroVector3d& Dir) const
+{
+    const FBodyDefinition& Def = Sim->GetRegistry().Get(Body);
+    const FAstroVector3d DirBF = Def.GetOrientationAt(Sim->GetSimulation().GetSimSeconds()).Transposed() * Dir;
+    if (Def.Terrain.IsValid())
+    {
+        return Def.Terrain->EllipsoidRadius(DirBF) + FMath::Max(0.0, Def.Terrain->HeightAt(DirBF, 0.5));
+    }
+    const double A = Def.EquatorialRadiusMeters, C = Def.PolarRadiusMeters;
+    return 1.0 / FMath::Sqrt((DirBF.X * DirBF.X + DirBF.Y * DirBF.Y) / (A * A) + DirBF.Z * DirBF.Z / (C * C));
+}
+
+void AAstroPawnBase::FocusOn(FName BodyID, double DistanceRadii, bool bInstant)
+{
+    UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    const int32 Body = Sim && Sim->IsReady() ? Sim->FindBodyIndex(BodyID) : INDEX_NONE;
+    if (Body == INDEX_NONE)
+    {
+        return;
+    }
+    const FBodyDefinition& Def = Sim->GetRegistry().Get(Body);
+    const FAstroVector3d BodyPos = Sim->GetSimulation().GetBodyState(Body).Position;
+    FAstroVector3d Rel = Sim->EngineToSimPosition(GetActorLocation()) - BodyPos;
+    double Distance = Rel.Length();
+    if (Distance < 1.0)
+    {
+        Rel = FAstroVector3d(1.0, 0.0, 0.2);
+        Distance = 4.0 * Def.EquatorialRadiusMeters;
+    }
+    OrbitBody = Body;
+    OrbitDir = OrbitTargetDir = Rel / Distance;
+    const double Surface = SurfaceRadius(Sim, Body, OrbitDir);
+    const double CurrentAlt = FMath::Max(Distance - Surface, 30.0);
+    // From far away (or when asked) fly in to a framing distance; close by, keep the height.
+    double TargetAlt = CurrentAlt;
+    if (DistanceRadii > 0.0)
+    {
+        TargetAlt = FMath::Max((DistanceRadii - 1.0) * Def.EquatorialRadiusMeters, 30.0);
+    }
+    else if (Distance > 8.0 * Def.EquatorialRadiusMeters)
+    {
+        TargetAlt = 2.5 * Def.EquatorialRadiusMeters;
+    }
+    OrbitTargetLogAltitude = FMath::Loge(TargetAlt);
+    OrbitLogAltitude = bInstant ? OrbitTargetLogAltitude : FMath::Loge(CurrentAlt);
+    OrbitLastSimSeconds = Sim->GetSimulation().GetSimSeconds();
+    OrbitView = bInstant ? FQuat::Identity : GetActorQuat();
+    Locomotion = EAstroLocomotion::Flying;
+    Velocity = FVector::ZeroVector;
+    bOrbiting = true;
+    if (bInstant)
+    {
+        // Snap: put the pawn in place now so the frame logic sees the right altitude.
+        const double Radius = Surface + TargetAlt;
+        const FAstroVector3d Pos = BodyPos + OrbitDir * Radius;
+        TeleportToSim(Pos, Sim->SimToEngineDirection(-OrbitDir).ToOrientationQuat());
+        UpdateReferenceFrame(Sim);
+        OrbitView = GetActorQuat();
+    }
+    UE_LOG(LogAstroPawn, Display, TEXT("Orbiting %s"), *Def.BodyID.ToString());
+}
+
+void AAstroPawnBase::FocusOnFromSunSide(FName BodyID, double DistanceRadii, double PhaseDeg, double ElevationDeg, bool bInstant)
+{
+    UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    const int32 Body = Sim && Sim->IsReady() ? Sim->FindBodyIndex(BodyID) : INDEX_NONE;
+    if (Body == INDEX_NONE)
+    {
+        return;
+    }
+    const FBodyRegistry& Registry = Sim->GetRegistry();
+    const FAstroVector3d BodyPos = Sim->GetSimulation().GetBodyState(Body).Position;
+    FAstroVector3d ToSun = Sim->GetSimulation().GetBodyState(Registry.GetStarIndex()).Position - BodyPos;
+    ToSun = ToSun.Length() > 1.0 ? ToSun.Normalized() : FAstroVector3d(1.0, 0.0, 0.0);
+    const double Yaw = FMath::Atan2(ToSun.Y, ToSun.X) + FMath::DegreesToRadians(PhaseDeg);
+    const double Pitch = FMath::DegreesToRadians(ElevationDeg);
+    const FAstroVector3d Dir(FMath::Cos(Pitch) * FMath::Cos(Yaw), FMath::Cos(Pitch) * FMath::Sin(Yaw), FMath::Sin(Pitch));
+    const double Radius = DistanceRadii * Registry.Get(Body).EquatorialRadiusMeters;
+    if (bInstant)
+    {
+        // Leave the current frame for one anchored at the body so the jump is exact.
+        Sim->SetRenderOriginAnchor(Body, Dir * Radius);
+        SetActorLocation(FVector::ZeroVector);
+    }
+    else
+    {
+        // Start the fly-in from along the requested direction.
+        TeleportToSim(BodyPos + Dir * (Sim->EngineToSimPosition(GetActorLocation()) - BodyPos).Length(), GetActorQuat());
+    }
+    FocusOn(BodyID, DistanceRadii, bInstant);
+}
+
+void AAstroPawnBase::GoHome()
+{
+    if (UAstroScaleDomainSubsystem* Domains = UAstroScaleDomainSubsystem::Get(this);
+        Domains && (Domains->GetDomain() == EAstroScaleDomain::Galaxy || Domains->IsTransitioning()))
+    {
+        if (!Domains->IsTransitioning())
+        {
+            Domains->RequestDomain(EAstroScaleDomain::SolarSystem);
+        }
+        bPendingHome = true; // finish once back in the solar system
+        return;
+    }
+    if (UAstroTravelSubsystem* Travel = UAstroTravelSubsystem::Get(this); Travel && Travel->IsTravelling())
+    {
+        Travel->FinishNow();
+    }
+    bPendingHome = false;
+    SpeedMultiplier = 1.0;
+    StopMotion();
+    FocusOnFromSunSide(HomeBody, HomeDistanceRadii, 45.0, 15.0, true);
+}
+
+void AAstroPawnBase::TickOrbit(UAstroSimulationSubsystem* Sim, float DeltaSeconds)
+{
+    if (!Sim->GetRegistry().GetAll().IsValidIndex(OrbitBody))
+    {
+        bOrbiting = false;
+        return;
+    }
+    const FBodyDefinition& Def = Sim->GetRegistry().Get(OrbitBody);
+    const double Now = Sim->GetSimulation().GetSimSeconds();
+    const FAstroMatrix3d Orientation = Def.GetOrientationAt(Now);
+    const FAstroVector3d Pole = Orientation.GetColumn(2);
+
+    // Close in, ride with the rotating surface (as the co-rotating frame does below 100 km).
+    const double Altitude0 = FMath::Exp(OrbitLogAltitude);
+    if (Altitude0 < FMath::Min(BodyFixedFrameAltitude, Def.EquatorialRadiusMeters * 0.5))
+    {
+        const FAstroMatrix3d Spin = Orientation * Def.GetOrientationAt(OrbitLastSimSeconds).Transposed();
+        OrbitDir = (Spin * OrbitDir).Normalized();
+        OrbitTargetDir = (Spin * OrbitTargetDir).Normalized();
+    }
+    OrbitLastSimSeconds = Now;
+
+    // Input: mouse / A-D / Space-C orbit; wheel and W-S zoom on a log scale.
+    const FVector2D Look = Input.ConsumeLook();
+    const double Boost = Input.bBoost ? 3.0 : 1.0;
+    const double YawDeg = Look.X * 0.15 + (Input.MoveAxis.Y * 60.0 * Boost + OrbitDriftDegPerSecond) * DeltaSeconds;
+    const double PitchDeg = -Look.Y * 0.15 + Input.MoveAxis.Z * 45.0 * Boost * DeltaSeconds;
+    const float Steps = Input.ConsumeSpeedSteps();
+    OrbitTargetLogAltitude -= Steps * 0.25 + Input.MoveAxis.X * 1.5 * Boost * DeltaSeconds;
+    OrbitTargetLogAltitude = FMath::Clamp(OrbitTargetLogAltitude, FMath::Loge(30.0), FMath::Loge(100.0 * AstroConstants::AstronomicalUnit));
+
+    auto RotateAbout = [](const FAstroVector3d& V, const FAstroVector3d& Axis, double Radians)
+    {
+        const double C = FMath::Cos(Radians), S = FMath::Sin(Radians);
+        return V * C + Axis.Cross(V) * S + Axis * (Axis.Dot(V) * (1.0 - C));
+    };
+    FAstroVector3d Target = RotateAbout(OrbitTargetDir, Pole, FMath::DegreesToRadians(YawDeg));
+    const FAstroVector3d Side = Pole.Cross(Target);
+    if (Side.Length() > 1e-6)
+    {
+        const FAstroVector3d Pitched = RotateAbout(Target, Side.Normalized(), FMath::DegreesToRadians(-PitchDeg));
+        if (FMath::Abs(Pitched.Dot(Pole)) < 0.995) // stop short of the poles
+        {
+            Target = Pitched;
+        }
+    }
+    OrbitTargetDir = Target.Normalized();
+
+    // Ease toward the targets: smooth on-screen, and a far-to-near focus flies in over ~2 s.
+    const double Ease = 1.0 - FMath::Exp(-8.0 * DeltaSeconds);
+    const double ZoomEase = 1.0 - FMath::Exp(-2.5 * DeltaSeconds);
+    OrbitDir = (OrbitDir + (OrbitTargetDir - OrbitDir) * Ease).Normalized();
+    OrbitLogAltitude += (OrbitTargetLogAltitude - OrbitLogAltitude) * ZoomEase;
+
+    const FAstroVector3d BodyPos = Sim->GetSimulation().GetBodyState(OrbitBody).Position;
+    const double Radius = SurfaceRadius(Sim, OrbitBody, OrbitDir) + FMath::Exp(OrbitLogAltitude);
+    const FVector Forward = Sim->SimToEngineDirection(-OrbitDir);
+    const FVector Up = Sim->SimToEngineDirection(Pole);
+    const FQuat Desired = FRotationMatrix::MakeFromXZ(Forward, Up).ToQuat();
+    OrbitView = FQuat::Slerp(OrbitView, Desired, 1.0 - FMath::Exp(-6.0 * DeltaSeconds));
+    SetActorLocationAndRotation(Sim->SimToEnginePosition(BodyPos + OrbitDir * Radius), OrbitView);
+    Velocity = FVector::ZeroVector;
 }
 
 FName AAstroPawnBase::GetReferenceBody() const
@@ -112,8 +335,18 @@ void AAstroPawnBase::Tick(float DeltaSeconds)
         return;
     }
 
+    if (bPendingHome)
+    {
+        GoHome();
+        return;
+    }
+
     UpdateReferenceFrame(Sim);
-    if (Locomotion == EAstroLocomotion::Walking)
+    if (bOrbiting && Locomotion == EAstroLocomotion::Flying)
+    {
+        TickOrbit(Sim, DeltaSeconds);
+    }
+    else if (Locomotion == EAstroLocomotion::Walking)
     {
         TickWalking(Sim, DeltaSeconds);
     }
@@ -373,6 +606,7 @@ void AAstroPawnBase::ToggleLanding()
         return;
     }
     // Keep facing the same way: derive walk yaw from the current forward.
+    bOrbiting = false;
     Locomotion = EAstroLocomotion::Walking;
     Velocity = FVector::ZeroVector;
     WalkPitch = 0.0;

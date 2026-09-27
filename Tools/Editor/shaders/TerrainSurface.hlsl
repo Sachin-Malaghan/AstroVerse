@@ -9,11 +9,12 @@
 //   Tint        float3
 //   Procedural  float   0..1 fractal albedo variation for bodies without a map
 //   SpecAmount  float   >0 when SpecTex marks water
+//   LatScale    float   maps' latitude from the geocentric direction: (A/C)^2 for geodetic maps, else 1
 
 const float PI = 3.14159265;
 float3 d = normalize(Dir);
 float lon = atan2(d.y, d.x);
-float lat = asin(clamp(d.z, -1.0, 1.0));
+float lat = atan2(d.z * LatScale, length(d.xy));
 float2 uv = float2(0.5 + lon / (2.0 * PI), 0.5 - lat / PI);
 float2 uvAlt = float2(frac(uv.x + 0.5), uv.y);
 float2 gx = ddx(uv), gy = ddy(uv);

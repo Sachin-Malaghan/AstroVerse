@@ -88,6 +88,15 @@ struct ASTROBODIES_API FAstroBodyDataRow : public FTableRowBase
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rotation")
     double PoleDecDeg = 90.0;
 
+    // Secular pole motion (IAU WGCCRE T terms, deg per Julian century). Earth's precession
+    // (-0.641, -0.557) moves its pole ~0.15 deg between 2000 and 2026: enough to put the
+    // Sun 0.2 deg off in a site's sky if ignored.
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rotation")
+    double PoleRARateDegPerCentury = 0.0;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rotation")
+    double PoleDecRateDegPerCentury = 0.0;
+
     // Prime meridian angle W at J2000.
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Rotation")
     double PrimeMeridianDeg = 0.0;

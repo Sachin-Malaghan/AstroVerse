@@ -30,7 +30,13 @@ namespace
 FAstroMatrix3d FBodyDefinition::GetOrientationAt(double SimSeconds) const
 {
     const double W = PrimeMeridianAtEpochRad + RotationRateRadPerSec * SimSeconds;
-    return EquatorFrameToEcliptic * FAstroMatrix3d::RotationZ(W);
+    if (PoleRARateDegPerCentury == 0.0 && PoleDecRateDegPerCentury == 0.0)
+    {
+        return EquatorFrameToEcliptic * FAstroMatrix3d::RotationZ(W);
+    }
+    const double T = SimSeconds / (AstroConstants::SecondsPerDay * 36525.0);
+    return EquatorFrameFromPole(PoleRADeg + PoleRARateDegPerCentury * T, PoleDecDeg + PoleDecRateDegPerCentury * T)
+         * FAstroMatrix3d::RotationZ(W);
 }
 
 bool FBodyRegistry::LoadFromDataTables(const UDataTable* PlanetTable, const UDataTable* MoonTable, FString& OutError)
@@ -161,6 +167,10 @@ bool FBodyRegistry::Resolve(FString& OutError)
         Body.RingOuterRadiusMeters = Row.RingOuterRadiusKm * 1000.0;
 
         Body.EquatorFrameToEcliptic = EquatorFrameFromPole(Row.PoleRADeg, Row.PoleDecDeg);
+        Body.PoleRADeg = Row.PoleRADeg;
+        Body.PoleDecDeg = Row.PoleDecDeg;
+        Body.PoleRARateDegPerCentury = Row.PoleRARateDegPerCentury;
+        Body.PoleDecRateDegPerCentury = Row.PoleDecRateDegPerCentury;
         Body.PrimeMeridianAtEpochRad = Row.PrimeMeridianDeg * DegToRad;
         Body.RotationRateRadPerSec = Row.RotationRateDegPerDay * DegToRad / SecondsPerDay;
 

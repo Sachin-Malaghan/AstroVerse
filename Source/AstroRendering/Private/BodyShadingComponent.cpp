@@ -79,6 +79,10 @@ void UBodyShadingComponent::BuildComponents()
     }
 
     const double Req = Definition->EquatorialRadiusMeters;
+    if (SurfaceMID && Definition->Terrain.IsValid() && Definition->Terrain->UsesGeodeticLatitude())
+    {
+        SurfaceMID->SetScalarParameterValue(TEXT("LatScale"), Req / Definition->PolarRadiusMeters);
+    }
     if (SurfaceMID && Definition->RingOuterRadiusMeters > 0.0)
     {
         SurfaceMID->SetScalarParameterValue(TEXT("RingInner"), Definition->RingInnerRadiusMeters / Req);
@@ -180,6 +184,7 @@ void UBodyShadingComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
         if (Corona)
         {
             Corona->SetCoronaLuminance(Disk * Settings->CoronaLuminanceFraction);
+            Corona->SetDiskLuminance(Disk);
         }
         return;
     }

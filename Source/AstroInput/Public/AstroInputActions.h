@@ -40,6 +40,16 @@ public:
     UPROPERTY() TObjectPtr<UInputAction> ToggleHUD;
     UPROPERTY() TObjectPtr<UInputAction> Menu;
     UPROPERTY() TObjectPtr<UInputAction> Help;
+    // Camera: orbit/zoom the selected body (F), return to the home view (Home / Backspace).
+    UPROPERTY() TObjectPtr<UInputAction> Focus;
+    UPROPERTY() TObjectPtr<UInputAction> Home;
+    // Lock the clock to real UTC (L).
+    UPROPERTY() TObjectPtr<UInputAction> GoLive;
+    // Start / stop the guided tour (F2).
+    UPROPERTY() TObjectPtr<UInputAction> Tour;
+    UPROPERTY() TObjectPtr<UInputAction> TourNext;
+    // Milky Way guide (V).
+    UPROPERTY() TObjectPtr<UInputAction> MilkyWayGuide;
 
     UPROPERTY() TObjectPtr<UInputMappingContext> DesktopContext;
     UPROPERTY() TObjectPtr<UInputMappingContext> VRContext;

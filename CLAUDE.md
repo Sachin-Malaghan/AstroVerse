@@ -115,6 +115,35 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - Remaining VR cost on this GPU is spread (base pass ~4 ms, sun lighting + shadows ~3.5, reflections/sky ~1.8, TAA). About 4 ms is editor-hosted `-game` overhead (`CompositeDebugPrimitives`, `ClearGPUMessageBuffer`) that a packaged build does not pay. On a VR min-spec GPU (RTX 2070 class, ~3x this card) every scene should fit 11.1 ms; verify on hardware with a headset.
 - Mobile groundwork (not yet run on a device): `MobileCVars` budget; `Config/DefaultDeviceProfiles.ini` caps TEXTUREGROUP_World (the 8K body maps) at 2K on Android/iOS; a tap (Touch1) selects under the reticle. Still to do for the port: touch look/move gestures, an ES3.1 / Vulkan shader-compile pass over the custom HLSL materials, a mobile HUD layout.
 
+## Post-phase features (decided 2026-09-27)
+
+VR stays built but is parked for later (user decision); the work below is desktop-first.
+
+### Live time
+- `UTimeController` has a **Live** mode (default at start, `bStartLive`): simulated time locked to real UTC at 1x. Real UTC = the system clock + an offset measured from the HTTP `Date` header of `NetworkTimeUrls` (HEAD requests; halved round trip; resynced every `NetworkResyncMinutes`, retried while offline). Offline it silently uses the system clock. This is the one sanctioned wall-clock read, inside the time source of truth.
+- Any manual change (pause, speed, rewind, jump) leaves Live; `L`, the HUD's LIVE button or `astro.Time.Live` return to it. The HUD shows UTC plus local time (this PC's zone, or the active site's).
+
+### Camera: orbit, zoom, home
+- `AAstroPawnBase` orbit mode: `F` orbits the selection (or the nearest body); mouse / A-D / Space-C circle it, wheel / W-S zoom on a log scale from 100 AU down to 30 m above the real terrain; below the co-rotating threshold the orbit rides with the surface. `F` again = free flight. Travel arrival drops you into orbit around the destination.
+- `Home` / `Backspace` (`astro.Home`) always returns to the home view (Earth, sunlit side) — from the galaxy, mid-travel, anywhere.
+
+### Guided tour
+- `UAstroTourSubsystem` (AstroUI) plays `Content/UI/DataTables/DT_Tour.csv` in row order: Sun -> Mercury ... Neptune (cinematic warp + orbit with slow drift, narration caption + facts card) -> looking back from 80 AU -> the Milky Way with the Sun marked. `F2` start/stop, `N` next; `-AstroTour` on the command line autostarts it (classroom / kiosk). Teachers edit the CSV, not code. The pawn owns the camera: the tour asks via `OnCameraRequest`.
+
+### Sun at a site
+- `FAstroSolarGeometry` (AstroBodies): sun azimuth / elevation (geometric and refracted), sunrise / solar noon / sunset, day length, whole-day paths, for any lat/lon on any body, from the live N-body state (osculating conic for other dates) and the body's rotation model. **Validated against NOAA's solar-position algorithm: worst 0.05 deg elevation / 0.08 deg azimuth** over 4 sites x 4 dates (test `AstroVerse.Sun.MatchesNOAA`; New Delhi 21 Jun 2026: sunrise 05:24, sunset 19:22 IST).
+- Earth's pole now precesses (IAU rates `PoleRA/DecRateDegPerCentury` in DT_Planets): without them the Sun was 0.2 deg off in 2026.
+- `UAstroSiteSubsystem` + `AAstroSiteActor` (AstroRendering): stand at a place (pause menu fields, `astro.Site <lat> <lon> [utc_offset] [name]`, `astro.Site.On <Body> ...`): compass rose with the eight vastu directions (Uttara, Ishanya, Purva, Agneya, Dakshina, Nairutya, Paschima, Vayavya), the Sun's paths for today / 21 Jun / 21 Dec / equinox with local-hour marks on a viewer-centred sky dome, a 1 m gnomon whose shadow the engine casts, and a HUD panel (sun now, rise/noon/set with azimuths, daylight, shadow length and direction). Run the clock (`[ ]`) to watch a day or a year.
+- **Latitude conventions** (`AstroGeodesy.h`): GPS and Earth maps are geodetic; MOLA/LOLA are planetocentric. `bGeodeticLatitude` in DT_Terrain (Earth) makes the DEM, ocean mask, surface/terrain shaders (`LatScale`) and landing use geodetic latitude — otherwise a site lands up to 21 km from where the coordinates say.
+
+### Real elevation data
+- `python Tools/Data/fetch_dems.py` downloads (git-ignored, ~900 MB) into `Content/Bodies/Terrain/DEM/`: Moon LRO LOLA LDEM_64 (474 m/px), Mars MGS MOLA MEGDR 32 px/deg (1.85 km/px), Earth NOAA ETOPO 2022 at 2 arc-min (3.7 km/px), each with a `.json` descriptor. `FEquirectMap::LoadRawDEM` reads them at full resolution (int16, ~0.8 GB RAM total, ~1 s load). Procedural relief then only adds detail below the DEM pixel, scaled by local ruggedness so plains stay flat. Missing files fall back to the `Fallback*` procedural columns. Test `AstroVerse.Terrain.RealElevation` checks Everest, Tibet, Delhi, Mariana, Olympus Mons, Hellas, Tycho.
+- Earth at 3.7 km is regional, not plot-level; a site's ground height is right to tens of metres on plains. Finer local DEMs (SRTM 30 m tiles) drop in the same way if needed.
+
+### Milky Way in the sky
+- The sky map is the real Milky Way panorama placed in galactic coordinates, so from any planet or site the band sits where it really is and turns with the body. `V` (`astro.Sky.MilkyWayGuide`) brightens it and labels the galactic centre, anticentre, the Sun's direction of motion and the galactic plane.
+- Far away, the Sun becomes a flux-conserving point source (corona shader `PointSigma`) so it stays the brightest point in the sky from beyond Neptune.
+
 ## Decided — travel (Phase 9, decided 2026-09-27)
 
 - **Two player-selectable transit styles**, both built: a **cinematic warp** (fixed camera sequence with a stylized warp effect) and a **player-piloted ship** the user flies through the warp. The choice is a user setting, not a build-time switch.
@@ -142,6 +171,9 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - Pawns: shared `AAstroPawnBase` — reference body by sphere of influence, inertial frame in space, co-rotating frame below 100 km, altitude-scaled flight, kinematic walking with each body's real surface gravity. `AAstroGameMode` picks `AAstroVRPawn` when a headset is active. The VR pawn is built but untested without a headset.
 
 ## Open items not yet scoped
+
+- VR: parked (built, untested without a headset).
+- Plot-level elevation for sites (SRTM / local survey tiles); building footprints for shading studies.
 
 
 - Asteroid belt representation: GPU-instanced/Niagara-driven per the fidelity system (never individually N-body simulated), but the exact rendering approach isn't decided.

@@ -71,6 +71,8 @@ def import_data_tables():
                      "/Game/Rendering/DataTables", "DT_Appearance", "/Script/AstroRendering.AstroBodyAppearanceRow")
     import_csv_table(os.path.join(PROJECT_CONTENT, "UI", "DataTables", "DT_Facts.csv"),
                      "/Game/UI/DataTables", "DT_Facts", "/Script/AstroUI.AstroBodyFactsRow")
+    import_csv_table(os.path.join(PROJECT_CONTENT, "UI", "DataTables", "DT_Tour.csv"),
+                     "/Game/UI/DataTables", "DT_Tour", "/Script/AstroUI.AstroTourStopRow")
 
 
 # ----------------------------------------------------------------------------- textures
@@ -294,6 +296,7 @@ def build_planet_surface():
         "RingInner": g.scalar("RingInner", 0.0),
         "RingOuter": g.scalar("RingOuter", 0.0),
         "RingTex": g.texture("RingTex", BLACK),
+        "LatScale": g.scalar("LatScale", 1.0),
     }
     c = g.custom("PlanetSurface.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT3)
     g.wire(c, inputs)
@@ -319,6 +322,7 @@ def build_terrain_surface():
         "Tint": g.vector("Tint", (1, 1, 1, 1)),
         "Procedural": g.scalar("Procedural", 0.0),
         "SpecAmount": g.scalar("SpecAmount", 0.0),
+        "LatScale": g.scalar("LatScale", 1.0),
     }
     c = g.custom("TerrainSurface.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT4)
     g.wire(c, inputs)
@@ -423,6 +427,8 @@ def build_corona():
         "CoronaExtent": g.scalar("CoronaExtent", 6.0),
         "Luminance": g.scalar("Luminance", 4.0e4),
         "Time": g.node(unreal.MaterialExpressionTime),
+        "PointSigma": g.scalar("PointSigma", 0.0),
+        "PointLuminance": g.scalar("PointLuminance", 0.0),
     }
     c = g.custom("SunCorona.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT3)
     g.wire(c, inputs)
@@ -548,6 +554,9 @@ def build_galaxy_materials():
 
     m = fresh_material("M_GalaxyMarker")
     m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    # Also the site overlay's dots and compass spokes (instanced meshes need the usage flag,
+    # or the engine silently substitutes its default material).
+    m.set_editor_property("used_with_instanced_static_meshes", True)
     g = Graph(m)
     MEL.connect_material_property(g.vector("Glow", (6.0, 4.6, 2.4, 1)), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     finish(m)

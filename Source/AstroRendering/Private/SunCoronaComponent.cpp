@@ -7,6 +7,8 @@
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/Engine.h"
 
 USunCoronaComponent::USunCoronaComponent()
 {
@@ -58,6 +60,45 @@ void USunCoronaComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
         if (!ToCamera.IsNearlyZero())
         {
             SetWorldRotation(FRotationMatrix::MakeFromZ(ToCamera).Rotator());
+        }
+        // Far away the disk falls below ~2 px: carry its flux in a ~1 px Gaussian instead
+        // (flux-conserving; widened rather than clipped where it would overflow FP16).
+        FVector2D ViewSize(1600.0, 900.0);
+        if (GEngine && GEngine->GameViewport)
+        {
+            GEngine->GameViewport->GetViewportSize(ViewSize);
+        }
+        const double RadiusEngine = GetComponentScale().X * 50.0 / FMath::Max(AppliedExtent > 0.0f ? AppliedExtent : CoronaExtent, 1e-3f);
+        const double PixelsPerRadian = 0.5 * ViewSize.X / FMath::Tan(FMath::DegreesToRadians(0.5 * PC->PlayerCameraManager->GetFOVAngle()));
+        const double DiskPx = RadiusEngine / ToCamera.Size() * PixelsPerRadian;
+        float Extent = CoronaExtent, Sigma = 0.0f, Peak = 0.0f;
+        const double Weight = FMath::Clamp((2.0 - DiskPx) / 1.5, 0.0, 1.0);
+        if (Weight > 0.0 && DiskPx > 0.0 && DiskLuminance > 0.0)
+        {
+            double S = 1.2 / DiskPx; // solar radii per ~1.2 px
+            const double MaxPeak = 3.0e4;
+            // Flux of the disk (L * pi R^2) = peak * 2 pi sigma^2.
+            double P = Weight * DiskLuminance / (2.0 * S * S);
+            if (P > MaxPeak)
+            {
+                S = FMath::Sqrt(Weight * DiskLuminance / (2.0 * MaxPeak));
+                P = MaxPeak;
+            }
+            Sigma = static_cast<float>(S);
+            Peak = static_cast<float>(P);
+            Extent = FMath::Max(CoronaExtent, static_cast<float>(5.0 * S));
+        }
+        if (CoronaMID)
+        {
+            if (!FMath::IsNearlyEqual(Extent, AppliedExtent))
+            {
+                // Keep the quad's world size in solar radii: rescale relative to the parent sphere.
+                SetRelativeScale3D(FVector(Extent));
+                CoronaMID->SetScalarParameterValue(TEXT("CoronaExtent"), Extent);
+                AppliedExtent = Extent;
+            }
+            CoronaMID->SetScalarParameterValue(TEXT("PointSigma"), Sigma);
+            CoronaMID->SetScalarParameterValue(TEXT("PointLuminance"), Peak);
         }
     }
 }

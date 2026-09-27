@@ -1,5 +1,7 @@
 // Developer console commands for the floating origin and body inspection. See CLAUDE.md Phase 2 / Phase 7.
 #include "HAL/IConsoleManager.h"
+#include "AstroGeodesy.h"
+#include "BodyTerrain.h"
 #include "AstroSimulationSubsystem.h"
 #include "Engine/World.h"
 #include "Math/AstroConstants.h"
@@ -51,10 +53,17 @@ namespace
             const double Lon = FCString::Atod(*Args[2]) * AstroConstants::DegToRad;
             const double Altitude = Args.Num() > 3 ? FCString::Atod(*Args[3]) : 2.0;
             const FBodyDefinition& Def = Sim->GetRegistry().Get(Body);
-            // Geocentric point on the spheroid, then up along the radial.
-            const FAstroVector3d Dir(FMath::Cos(Lat) * FMath::Cos(Lon), FMath::Cos(Lat) * FMath::Sin(Lon), FMath::Sin(Lat));
+            // Latitude in the body's map convention (geodetic on Earth, as GPS gives it), then
+            // the real ground there, then up along the radial.
+            const bool bGeodetic = Def.Terrain.IsValid() && Def.Terrain->UsesGeodeticLatitude();
+            const FAstroVector3d Dir = AstroGeodesy::SurfaceDirection(Lat * AstroConstants::RadToDeg, Lon * AstroConstants::RadToDeg,
+                Def.EquatorialRadiusMeters, Def.PolarRadiusMeters, bGeodetic);
             const double a = Def.EquatorialRadiusMeters, c = Def.PolarRadiusMeters;
-            const double R = 1.0 / FMath::Sqrt((Dir.X * Dir.X + Dir.Y * Dir.Y) / (a * a) + Dir.Z * Dir.Z / (c * c));
+            double R = 1.0 / FMath::Sqrt((Dir.X * Dir.X + Dir.Y * Dir.Y) / (a * a) + Dir.Z * Dir.Z / (c * c));
+            if (Def.Terrain.IsValid())
+            {
+                R += Def.Terrain->HeightAt(Dir, 0.5);
+            }
             Sim->SetRenderOriginBodyFixed(Body, Dir * (R + Altitude));
         }));
 

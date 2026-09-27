@@ -75,7 +75,7 @@ TStatId UAstroTravelSubsystem::GetStatId() const
     RETURN_QUICK_DECLARE_CYCLE_STAT(UAstroTravelSubsystem, STATGROUP_Tickables);
 }
 
-bool UAstroTravelSubsystem::BeginTravel(FName BodyID)
+bool UAstroTravelSubsystem::BeginTravel(FName BodyID, bool bForceCinematic)
 {
     UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
     AActor* View = ViewActorOf(GetWorld());
@@ -115,7 +115,7 @@ bool UAstroTravelSubsystem::BeginTravel(FName BodyID)
     StartRotation = View->GetActorQuat();
     Destination = Body;
     DestinationID = BodyID;
-    ActiveStyle = Settings->Style;
+    ActiveStyle = bForceCinematic ? EAstroTravelStyle::CinematicWarp : Settings->Style;
     PilotThrottle = 0.0f;
     PilotSteer = FVector2D::ZeroVector;
     TunnelOffset = FVector2D::ZeroVector;

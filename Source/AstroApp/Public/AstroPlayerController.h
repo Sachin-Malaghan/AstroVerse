@@ -29,6 +29,14 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Astro|Selection")
     void SelectBody(FName BodyID);
 
+    // Guided tour (F2): Sun -> planets -> the whole system -> the Milky Way.
+    void ToggleTour();
+
+    // Stand at a place on a body (GPS-style latitude, east longitude) with its sun data and
+    // sun-path overlay; UtcOffsetHours sets the local clock (e.g. 5.5 for India).
+    void GoToSite(FName Body, double LatDeg, double LonDeg, double UtcOffsetHours, const FString& Name);
+    void ClearSite();
+
     // Body nearest the view center within MaxAngleDeg (or covering the center).
     UFUNCTION(BlueprintPure, Category = "Astro|Selection")
     FName FindBodyUnderReticle(float MaxAngleDeg = 4.0f) const;
@@ -58,6 +66,16 @@ private:
     void OnMenuAction(const FInputActionValue& Value);
     void OnTravelAction(const FInputActionValue& Value);
     void OnHelpAction(const FInputActionValue& Value);
+    void OnFocusAction(const FInputActionValue& Value);
+    void OnHomeAction(const FInputActionValue& Value);
+    void OnGoLiveAction(const FInputActionValue& Value);
+    void OnTourAction(const FInputActionValue& Value);
+    void OnTourNextAction(const FInputActionValue& Value);
+    void OnMilkyWayGuideAction(const FInputActionValue& Value);
+    void HandleUICommand(FName Command);
+    void FinishGoToSite();
+    struct FPendingSite { FName Body; double Lat = 0, Lon = 0, Zone = 0; FString Name; };
+    TOptional<FPendingSite> PendingSite;
 
     UPROPERTY(Transient)
     TObjectPtr<UAstroInputActions> InputActions;

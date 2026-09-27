@@ -17,6 +17,14 @@
 #include "Math/AstroMatrix3d.h"
 #include "Star.h"
 
+static TAutoConsoleVariable<int32> CVarAstroMilkyWayGuide(
+    TEXT("astro.Sky.MilkyWayGuide"), 0, TEXT("1 = brighter Milky Way band with labels (galactic centre, plane, the Sun's direction of motion)."));
+
+bool AAstroSpaceEnvironment::IsMilkyWayGuideOn()
+{
+    return CVarAstroMilkyWayGuide.GetValueOnGameThread() != 0;
+}
+
 static TAutoConsoleVariable<float> CVarAstroExposureCompensation(
     TEXT("astro.Render.ExposureCompensation"), 0.0f,
     TEXT("Extra exposure in stops on top of the sunlight meter (+ brighter)."));
@@ -132,6 +140,18 @@ void AAstroSpaceEnvironment::Tick(float DeltaSeconds)
     // exposure for EV100 is 1 / (1.2 * 2^EV100).
     PostProcess->Settings.AutoExposureBias = static_cast<float>(-(CurrentEV100 + FMath::Log2(1.2)));
 
+    // Lumen / sky-capture caches store lighting pre-exposed in FP16 (usable EV = value-12 ..
+    // value+8). Exposure here spans ~EV 5 (Neptune) to ~27 (skimming the Sun), so keep the
+    // cache centred on the metered exposure; move it in whole steps (a change resets caches).
+    if (IConsoleVariable* PreExposure = IConsoleManager::Get().FindConsoleVariable(TEXT("r.EyeAdaptation.CachedLightingPreExposure")))
+    {
+        const double Wanted = FMath::RoundToDouble(CurrentEV100 - 2.0);
+        if (FMath::Abs(PreExposure->GetFloat() - Wanted) >= 3.0)
+        {
+            PreExposure->Set(static_cast<float>(Wanted), ECVF_SetByCode);
+        }
+    }
+
     double Daylight = 0.0;
     UpdateSkyAtmosphere(Sim, CameraSim, Daylight);
 
@@ -144,7 +164,8 @@ void AAstroSpaceEnvironment::Tick(float DeltaSeconds)
 
         // Display-referred brightness converted back to scene luminance at this exposure.
         // ...and a sunlit sky overhead washes them out.
-        const double StarNits = Settings->StarDisplayBrightness * 1.2 * FMath::Pow(2.0, CurrentEV100) * (1.0 - 0.995 * Daylight);
+        const double Guide = IsMilkyWayGuideOn() ? 6.0 : 1.0; // teaching mode: make the band pop
+        const double StarNits = Guide * Settings->StarDisplayBrightness * 1.2 * FMath::Pow(2.0, CurrentEV100) * (1.0 - 0.995 * Daylight);
         StarFieldMID->SetScalarParameterValue(TEXT("StarNits"), static_cast<float>(StarNits));
     }
 

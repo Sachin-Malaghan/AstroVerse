@@ -186,10 +186,11 @@ namespace
             const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(World);
             if (Pawn && Sim)
             {
-                UE_LOG(LogTemp, Display, TEXT("Pawn: %s near %s, %s frame, altitude %.2f m, speed %.2f m/s"),
+                UE_LOG(LogTemp, Display, TEXT("Pawn: %s near %s, %s frame, altitude %.2f m, speed %.2f m/s%s%s"),
                     Pawn->GetLocomotion() == EAstroLocomotion::Walking ? TEXT("walking") : TEXT("flying"),
                     *Pawn->GetReferenceBody().ToString(), Sim->IsRotatingFrame() ? TEXT("co-rotating") : TEXT("inertial"),
-                    Pawn->GetAltitude(), Pawn->GetSpeedMetersPerSecond());
+                    Pawn->GetAltitude(), Pawn->GetSpeedMetersPerSecond(), Pawn->IsOrbiting() ? TEXT(", orbiting ") : TEXT(""),
+                    Pawn->IsOrbiting() ? *Pawn->GetOrbitBody().ToString() : TEXT(""));
             }
         }));
 
@@ -233,6 +234,56 @@ namespace
             {
                 PC->SelectBody(FName(*Args[0]));
             }
+        }));
+
+    // astro.Site 28.6139 77.2090 5.5 New Delhi  |  astro.Site.On Mars 18.65 226.2 0 Olympus Mons
+    void RunSite(UWorld* World, FName Body, const TArray<FString>& Args, int32 First)
+    {
+        AAstroPlayerController* PC = World ? Cast<AAstroPlayerController>(World->GetFirstPlayerController()) : nullptr;
+        if (!PC || Args.Num() < First + 2)
+        {
+            return;
+        }
+        const double Zone = Args.Num() > First + 2 ? FCString::Atod(*Args[First + 2]) : 0.0;
+        FString Name;
+        for (int32 i = First + 3; i < Args.Num(); ++i)
+        {
+            Name += (Name.IsEmpty() ? TEXT("") : TEXT(" ")) + Args[i];
+        }
+        PC->GoToSite(Body, FCString::Atod(*Args[First]), FCString::Atod(*Args[First + 1]), Zone, Name);
+    }
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdSite(
+        TEXT("astro.Site"), TEXT("astro.Site <lat_deg> <east_lon_deg> [utc_offset_h] [name...] - stand at a place on Earth with its sun data"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World) { RunSite(World, TEXT("Earth"), Args, 0); }));
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdSiteOn(
+        TEXT("astro.Site.On"), TEXT("astro.Site.On <BodyID> <lat_deg> <east_lon_deg> [utc_offset_h] [name...]"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            if (Args.Num() > 0) { RunSite(World, FName(*Args[0]), Args, 1); }
+        }));
+
+    FAutoConsoleCommandWithWorld GAstroCmdSiteClear(
+        TEXT("astro.Site.Clear"), TEXT("Remove the site overlay"),
+        FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World)
+        {
+            if (AAstroPlayerController* PC = World ? Cast<AAstroPlayerController>(World->GetFirstPlayerController()) : nullptr) { PC->ClearSite(); }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdHome(
+        TEXT("astro.Home"), TEXT("Return to the home view (Earth)"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+        {
+            if (AAstroPawnBase* Pawn = World && World->GetFirstPlayerController() ? Cast<AAstroPawnBase>(World->GetFirstPlayerController()->GetPawn()) : nullptr) { Pawn->GoHome(); }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdFocus(
+        TEXT("astro.Focus"), TEXT("astro.Focus <BodyID> [distance_radii] - orbit a body (wheel zooms)"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            AAstroPawnBase* Pawn = World && World->GetFirstPlayerController() ? Cast<AAstroPawnBase>(World->GetFirstPlayerController()->GetPawn()) : nullptr;
+            if (Pawn && Args.Num() > 0) { Pawn->FocusOn(FName(*Args[0]), Args.Num() > 1 ? FCString::Atod(*Args[1]) : 0.0, false); }
         }));
 
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdUIToggle(

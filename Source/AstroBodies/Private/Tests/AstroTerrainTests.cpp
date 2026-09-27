@@ -3,6 +3,7 @@
 #include "BodyRegistry.h"
 #include "Math/AstroConstants.h"
 #include "Misc/Paths.h"
+#include "AstroGeodesy.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -116,6 +117,60 @@ bool FAstroTerrainOceanTest::RunTest(const FString& Parameters)
     // Oblate ellipsoid: polar radius ~21 km less than equatorial.
     TestEqual(TEXT("Equatorial radius (m)"), Earth.EllipsoidRadius(AstroTerrainTests::LatLon(0, 0)), 6378137.0, 1.0);
     TestEqual(TEXT("Polar radius (m)"), Earth.EllipsoidRadius(AstroTerrainTests::LatLon(90, 0)), 6356752.0, 1.0);
+    return true;
+}
+
+// Real elevation (DEMs from Tools/Data/fetch_dems.py): landmarks land where they should, at
+// the right height. Skipped with a warning when the data hasn't been fetched.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FAstroTerrainRealElevationTest, "AstroVerse.Terrain.RealElevation", AstroTerrainTests::Flags)
+bool FAstroTerrainRealElevationTest::RunTest(const FString& Parameters)
+{
+    FBodyRegistry Registry;
+    if (!AstroTerrainTests::Load(*this, Registry))
+    {
+        return false;
+    }
+    const FBodyTerrain& Earth = *Registry.Get(Registry.FindIndex(TEXT("Earth"))).Terrain;
+    const FBodyTerrain& Moon = *Registry.Get(Registry.FindIndex(TEXT("Moon"))).Terrain;
+    const FBodyTerrain& Mars = *Registry.Get(Registry.FindIndex(TEXT("Mars"))).Terrain;
+    if (!Earth.HasRealElevation() || !Moon.HasRealElevation() || !Mars.HasRealElevation())
+    {
+        AddWarning(TEXT("DEMs not present (run Tools/Data/fetch_dems.py): real-elevation checks skipped."));
+        return true;
+    }
+    using AstroTerrainTests::LatLon;
+    struct FCheck { const TCHAR* Name; const FBodyTerrain* Body; double Lat, Lon, Min, Max; };
+    const FCheck Checks[] = {
+        // Earth, ETOPO 2022 at 2' (~3.7 km cells average peaks down): Everest 8,849 m, the
+        // Tibetan plateau ~4.5-5 km, Delhi ~215 m, the Mariana Trench ~-10.9 km.
+        { TEXT("Everest region"), &Earth, 27.988, 86.925, 6000.0, 8900.0 },
+        { TEXT("Tibetan plateau"), &Earth, 33.0, 88.0, 4200.0, 5600.0 },
+        { TEXT("Delhi"), &Earth, 28.61, 77.21, 150.0, 300.0 },
+        { TEXT("Mariana Trench"), &Earth, 11.35, 142.2, -11000.0, -9000.0 },
+        // Mars, MOLA: Olympus Mons summit ~21.2 km above the areoid, Hellas floor ~-7 km.
+        { TEXT("Olympus Mons"), &Mars, 18.65, -133.8, 18000.0, 22000.0 },
+        { TEXT("Hellas Planitia"), &Mars, -42.4, 70.5, -7500.0, -5000.0 },
+        // Moon, LOLA: Tycho's floor lies ~3 km below the reference sphere.
+        { TEXT("Tycho floor"), &Moon, -43.3, -11.2, -3800.0, -2000.0 },
+    };
+    for (const FCheck& C : Checks)
+    {
+        // Each body's own latitude convention (geodetic on Earth, as maps and GPS give it).
+        const FAstroVector3d Dir = AstroGeodesy::SurfaceDirection(C.Lat, C.Lon, C.Body->GetEquatorialRadius(), C.Body->GetPolarRadius(), C.Body->UsesGeodeticLatitude());
+        const double H = C.Body->DEMHeightAt(Dir);
+        AddInfo(FString::Printf(TEXT("%s: %.0f m"), C.Name, H));
+        TestTrue(FString::Printf(TEXT("%s elevation %.0f m in [%.0f, %.0f]"), C.Name, H, C.Min, C.Max), H >= C.Min && H <= C.Max);
+    }
+    // Plains stay flat: over the Indo-Gangetic plain the sub-DEM detail must be damped.
+    double MinH = 1e30, MaxH = -1e30;
+    for (int32 i = 0; i <= 200; ++i)
+    {
+        const double H = Earth.HeightAt(LatLon(28.0, 77.0 + i * 0.0005)); // ~10 km transect near Delhi
+        MinH = FMath::Min(MinH, H);
+        MaxH = FMath::Max(MaxH, H);
+    }
+    AddInfo(FString::Printf(TEXT("Indo-Gangetic plain, 10 km transect: %.0f .. %.0f m"), MinH, MaxH));
+    TestTrue(TEXT("Plain relief under 60 m over 10 km"), MaxH - MinH < 60.0);
     return true;
 }
 

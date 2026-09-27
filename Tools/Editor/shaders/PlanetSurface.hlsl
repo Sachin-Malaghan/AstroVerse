@@ -22,13 +22,15 @@
 //   Procedural    float   0..1 blend of fractal noise into the albedo (bodies with no map)
 //   RingInner / RingOuter  float  ring radii in planet radii (0 = no rings)
 //   RingTex       Texture  ring alpha/color strip (u = radial)
+//   LatScale      float   maps' latitude from the mesh direction: A/C for geodetic maps (Earth), else 1
+//                         (the mesh is a scaled sphere, so its direction gives parametric latitude)
 
 const float PI = 3.14159265;
 float3 d = normalize(LocalPos);
 
 // Equirectangular UV, east longitude positive, north up.
 float lon = atan2(-d.y, d.x);
-float lat = asin(clamp(d.z, -1.0, 1.0));
+float lat = atan2(d.z * LatScale, length(d.xy));
 float2 uv = float2(0.5 + lon / (2.0 * PI), 0.5 - lat / PI);
 
 // Seam-free gradients: use whichever wrap of u has the smaller derivative.

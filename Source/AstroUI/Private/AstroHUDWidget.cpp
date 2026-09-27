@@ -4,6 +4,10 @@
 #include "AstroSimulationSubsystem.h"
 #include "AstroTravelSubsystem.h"
 #include "AstroUIFormat.h"
+#include "AstroSiteSubsystem.h"
+#include "AstroRenderingSubsystem.h"
+#include "AstroSpaceEnvironment.h"
+#include "AstroScaleDomainSubsystem.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Blueprint/WidgetTree.h"
 #include "Camera/PlayerCameraManager.h"
@@ -95,11 +99,15 @@ void UAstroHUDWidget::Build()
     RewindLabel = RewindText;
     PauseLabel = PauseText;
     UButton* Faster = MakeButton(TEXT(" + "), Unused);
+    UTextBlock* LiveText = nullptr;
+    UButton* Live = MakeButton(TEXT(" LIVE "), LiveText);
+    LiveLabel = LiveText;
+    Live->OnClicked.AddDynamic(this, &UAstroHUDWidget::OnLiveClicked);
     Rewind->OnClicked.AddDynamic(this, &UAstroHUDWidget::OnRewindClicked);
     Slower->OnClicked.AddDynamic(this, &UAstroHUDWidget::OnSlowerClicked);
     PauseButton->OnClicked.AddDynamic(this, &UAstroHUDWidget::OnPauseClicked);
     Faster->OnClicked.AddDynamic(this, &UAstroHUDWidget::OnFasterClicked);
-    for (UButton* Button : { Rewind, Slower, PauseButton, Faster })
+    for (UButton* Button : { Rewind, Slower, PauseButton, Faster, Live })
     {
         TimeRow->AddChildToHorizontalBox(Button)->SetPadding(FMargin(2, 0));
     }
@@ -151,7 +159,46 @@ void UAstroHUDWidget::Build()
     Bottom->AddChildToVerticalBox(ToastText)->SetHorizontalAlignment(HAlign_Center);
     UCanvasPanelSlot* BottomSlot = Place(Root, Bottom, FAnchors(0.5f, 1.0f), FVector2D(0.5f, 1.0f), FVector2D(0, -40));
     BottomSlot->SetAutoSize(false);
-    BottomSlot->SetSize(FVector2D(520, 90));
+    BottomSlot->SetSize(FVector2D(760, 90));
+
+    // --- Site panel (left): the Sun at a place on the ground.
+    SiteLabelLayer = WidgetTree->ConstructWidget<UCanvasPanel>();
+    UCanvasPanelSlot* SiteLayerSlot = Root->AddChildToCanvas(SiteLabelLayer);
+    SiteLayerSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+    SiteLayerSlot->SetOffsets(FMargin(0));
+    SitePanel = WidgetTree->ConstructWidget<UBorder>();
+    SitePanel->SetBrushColor(PanelColor);
+    SitePanel->SetPadding(FMargin(14, 10));
+    UVerticalBox* SiteBox = WidgetTree->ConstructWidget<UVerticalBox>();
+    SitePanel->AddChild(SiteBox);
+    SiteTitle = MakeText(18, Accent);
+    SiteText = MakeText(13, FLinearColor(0.88f, 0.9f, 0.96f, 1.0f));
+    SiteBox->AddChildToVerticalBox(SiteTitle)->SetPadding(FMargin(0, 0, 0, 4));
+    SiteBox->AddChildToVerticalBox(SiteText);
+    USizeBox* SiteSize = WidgetTree->ConstructWidget<USizeBox>();
+    SiteSize->SetWidthOverride(440.0f);
+    SiteSize->AddChild(SitePanel);
+    Place(Root, SiteSize, FAnchors(0.0f, 0.0f), FVector2D(0.0f, 0.0f), FVector2D(20, 100));
+    SitePanel->SetVisibility(ESlateVisibility::Collapsed);
+
+    // --- Caption (guided tour narration), above the toasts.
+    CaptionPanel = WidgetTree->ConstructWidget<UBorder>();
+    CaptionPanel->SetBrushColor(PanelColor);
+    CaptionPanel->SetPadding(FMargin(18, 12));
+    UVerticalBox* CaptionBox = WidgetTree->ConstructWidget<UVerticalBox>();
+    CaptionPanel->AddChild(CaptionBox);
+    CaptionTitle = MakeText(22, Accent);
+    CaptionText = MakeText(15);
+    CaptionText->SetWrapTextAt(720.0f);
+    CaptionFooter = MakeText(12, Dim);
+    CaptionBox->AddChildToVerticalBox(CaptionTitle)->SetPadding(FMargin(0, 0, 0, 6));
+    CaptionBox->AddChildToVerticalBox(CaptionText)->SetPadding(FMargin(0, 0, 0, 8));
+    CaptionBox->AddChildToVerticalBox(CaptionFooter);
+    USizeBox* CaptionSize = WidgetTree->ConstructWidget<USizeBox>();
+    CaptionSize->SetWidthOverride(760.0f);
+    CaptionSize->AddChild(CaptionPanel);
+    Place(Root, CaptionSize, FAnchors(0.5f, 1.0f), FVector2D(0.5f, 1.0f), FVector2D(0, -140));
+    CaptionPanel->SetVisibility(ESlateVisibility::Collapsed);
     TravelText->SetVisibility(ESlateVisibility::Collapsed);
     TravelBar->SetVisibility(ESlateVisibility::Collapsed);
 
@@ -159,8 +206,10 @@ void UAstroHUDWidget::Build()
     HelpText = MakeText(12, Dim);
     HelpText->SetText(FText::FromString(TEXT(
         "WASD / Space / C  fly     Mouse  look     Q E  roll     Wheel  speed     Shift  boost\n"
-        "Click  select (again: lock)     T  travel     G  land / take off     M  galaxy\n"
-        "[ ]  time slower / faster     P  pause     R  rewind     H  hide HUD     Esc  menu")));
+        "F  orbit the selection (mouse circles, wheel or W / S zoom; F again: free flight)     Home  back to Earth if lost\n"
+        "Click  select (again: lock)     T  travel     G  land / take off     M  galaxy     V  Milky Way guide\n"
+        "[ ]  time slower / faster     P  pause     R  rewind     L  live (real UTC)     F2  guided tour, N  next\n"
+        "H  hide HUD     Esc  menu (sun at a site, settings)")));
     Place(Root, HelpText, FAnchors(0.0f, 1.0f), FVector2D(0.0f, 1.0f), FVector2D(20, -40));
     HelpText->SetVisibility(ESlateVisibility::Collapsed);
     UTextBlock* HelpHint = MakeText(12, Dim);
@@ -196,6 +245,19 @@ void UAstroHUDWidget::SetViewerStatus(const FString& Status)
     StatusText->SetText(FText::FromString(Status));
 }
 
+void UAstroHUDWidget::ShowCaption(const FString& Title, const FString& Text, const FString& Footer)
+{
+    CaptionTitle->SetText(FText::FromString(Title));
+    CaptionText->SetText(FText::FromString(Text));
+    CaptionFooter->SetText(FText::FromString(Footer));
+    CaptionPanel->SetVisibility(ESlateVisibility::HitTestInvisible);
+}
+
+void UAstroHUDWidget::HideCaption()
+{
+    CaptionPanel->SetVisibility(ESlateVisibility::Collapsed);
+}
+
 void UAstroHUDWidget::ShowToast(const FString& Message, float Seconds)
 {
     ToastText->SetText(FText::FromString(Message));
@@ -213,11 +275,140 @@ void UAstroHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     }
     UpdateFacts();
     UpdateTravel();
+    UpdateSite();
+    UpdateSkyGuide();
     if (ToastRemaining > 0.0f)
     {
         ToastRemaining -= InDeltaTime;
         ToastText->SetRenderOpacity(FMath::Clamp(ToastRemaining, 0.0f, 1.0f));
     }
+}
+
+void UAstroHUDWidget::UpdateSkyGuide()
+{
+    struct FGuideLabel { double L, B; const TCHAR* Text; };
+    // Galactic longitude / latitude (deg). The Sun's orbital motion points to l = 90 (Cygnus).
+    static const FGuideLabel Named[] = {
+        { 0.0, 0.0, TEXT("Galactic centre - Sagittarius (26,700 ly)") },
+        { 180.0, 0.0, TEXT("Galactic anticentre - Taurus / Auriga") },
+        { 90.0, 0.0, TEXT("The Sun moves this way - Cygnus, 230 km/s") },
+        { 0.0, 90.0, TEXT("North galactic pole - Coma Berenices") },
+    };
+    const UAstroRenderingSubsystem* Rendering = UAstroRenderingSubsystem::Get(this);
+    const AAstroSpaceEnvironment* Env = Rendering ? Rendering->GetEnvironment() : nullptr;
+    const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    const UAstroScaleDomainSubsystem* Domains = UAstroScaleDomainSubsystem::Get(this);
+    APlayerController* PC = GetOwningPlayer();
+    const bool bOn = Env && Sim && Sim->IsReady() && PC && PC->PlayerCameraManager && !bCompact && AAstroSpaceEnvironment::IsMilkyWayGuideOn()
+        && !(Domains && Domains->GetDomain() == EAstroScaleDomain::Galaxy);
+    // 4 named points + the plane marked every 10 deg.
+    const int32 Count = bOn ? UE_ARRAY_COUNT(Named) + 36 : 0;
+    while (SkyLabels.Num() < Count)
+    {
+        UTextBlock* Label = MakeText(13, FLinearColor(0.75f, 0.85f, 1.0f, 0.9f));
+        UCanvasPanelSlot* LabelSlot = SiteLabelLayer->AddChildToCanvas(Label);
+        LabelSlot->SetAutoSize(true);
+        LabelSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+        SkyLabels.Add(Label);
+    }
+    FAstroVector3d GX, GY, GZ;
+    if (bOn)
+    {
+        Env->GetGalacticAxes(GX, GY, GZ);
+    }
+    const FVector Camera = bOn ? PC->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
+    const float Scale = UWidgetLayoutLibrary::GetViewportScale(this);
+    for (int32 i = 0; i < SkyLabels.Num(); ++i)
+    {
+        UTextBlock* Label = SkyLabels[i];
+        bool bVisible = false;
+        if (i < Count)
+        {
+            const bool bNamed = i < static_cast<int32>(UE_ARRAY_COUNT(Named));
+            const double L = FMath::DegreesToRadians(bNamed ? Named[i].L : (i - UE_ARRAY_COUNT(Named)) * 10.0);
+            const double B = FMath::DegreesToRadians(bNamed ? Named[i].B : 0.0);
+            const FAstroVector3d Dir = GX * (FMath::Cos(B) * FMath::Cos(L)) + GY * (FMath::Cos(B) * FMath::Sin(L)) + GZ * FMath::Sin(B);
+            FVector2D Screen;
+            bVisible = PC->ProjectWorldLocationToScreen(Camera + Sim->SimToEngineDirection(Dir) * 1.0e7, Screen, false);
+            if (bVisible)
+            {
+                Label->SetText(FText::FromString(bNamed ? FString(Named[i].Text) : FString(TEXT("-  -"))));
+                Cast<UCanvasPanelSlot>(Label->Slot)->SetPosition(Screen / Scale);
+            }
+        }
+        Label->SetVisibility(bVisible ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+    }
+}
+
+void UAstroHUDWidget::UpdateSite()
+{
+    const UAstroSiteSubsystem* Site = UAstroSiteSubsystem::Get(this);
+    APlayerController* PC = GetOwningPlayer();
+    const bool bShow = Site && Site->HasSite() && !bCompact;
+    SitePanel->SetVisibility(bShow ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+    const TArray<FAstroSiteLabel>* Labels = bShow ? &Site->GetLabels() : nullptr;
+    const int32 Count = Labels ? Labels->Num() : 0;
+    while (SiteLabels.Num() < Count)
+    {
+        UTextBlock* Label = MakeText(13);
+        UCanvasPanelSlot* LabelSlot = SiteLabelLayer->AddChildToCanvas(Label);
+        LabelSlot->SetAutoSize(true);
+        LabelSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+        SiteLabels.Add(Label);
+    }
+    const float Scale = UWidgetLayoutLibrary::GetViewportScale(this);
+    for (int32 i = 0; i < SiteLabels.Num(); ++i)
+    {
+        UTextBlock* Label = SiteLabels[i];
+        FVector2D Screen;
+        const bool bVisible = i < Count && PC && PC->ProjectWorldLocationToScreen(Site->LabelWorldPosition((*Labels)[i]), Screen, false);
+        Label->SetVisibility(bVisible ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+        if (bVisible)
+        {
+            Label->SetText(FText::FromString((*Labels)[i].Text));
+            Label->SetColorAndOpacity(FSlateColor((*Labels)[i].Color));
+            Cast<UCanvasPanelSlot>(Label->Slot)->SetPosition(Screen / Scale);
+        }
+    }
+    if (!bShow)
+    {
+        return;
+    }
+    const FAstroSiteReport& R = Site->GetReport();
+    auto Clock = [&](double Sim)
+    {
+        const double Hours = FMath::Fmod((Sim - R.LocalDayStartSim) / 3600.0 + 48.0, 24.0);
+        const int32 Minutes = FMath::RoundToInt(Hours * 60.0) % 1440;
+        return FString::Printf(TEXT("%02d:%02d"), Minutes / 60, Minutes % 60);
+    };
+    const int32 ZoneMin = FMath::RoundToInt(R.UtcOffsetHours * 60.0);
+    SiteTitle->SetText(FText::FromString(FString::Printf(TEXT("%s   (%s)"), *R.Name, *R.Body.ToString())));
+    FString Text = FString::Printf(TEXT("%.5f %s, %.5f %s   ground %.0f m%s\n"),
+        FMath::Abs(R.LatDeg), R.LatDeg >= 0 ? TEXT("N") : TEXT("S"), FMath::Abs(R.LonDeg), R.LonDeg >= 0 ? TEXT("E") : TEXT("W"),
+        R.ElevationM, R.bRealElevation ? TEXT(" (real elevation data)") : TEXT(" (procedural)"));
+    Text += FString::Printf(TEXT("Local time zone UTC%c%02d:%02d\n\n"), ZoneMin < 0 ? TEXT('-') : TEXT('+'), FMath::Abs(ZoneMin) / 60, FMath::Abs(ZoneMin) % 60);
+    const bool bUp = R.Sun.ApparentElevationDeg > -0.833;
+    Text += FString::Printf(TEXT("Sun now: azimuth %.1f deg (%s), elevation %.1f deg%s\n"), R.Sun.AzimuthDeg,
+        *UAstroSiteSubsystem::CompassName(R.Sun.AzimuthDeg, false), R.Sun.ApparentElevationDeg, bUp ? TEXT("") : TEXT("  - below the horizon"));
+    if (R.Today.bRises || R.Today.bSets)
+    {
+        Text += FString::Printf(TEXT("Sunrise %s  (az %.1f %s)     Sunset %s  (az %.1f %s)\n"),
+            *Clock(R.Today.SunriseSim), R.Today.SunriseAzimuthDeg, *UAstroSiteSubsystem::CompassName(R.Today.SunriseAzimuthDeg, false),
+            *Clock(R.Today.SunsetSim), R.Today.SunsetAzimuthDeg, *UAstroSiteSubsystem::CompassName(R.Today.SunsetAzimuthDeg, false));
+    }
+    else
+    {
+        Text += R.Today.bPolarDay ? TEXT("Midnight sun: the Sun does not set today\n") : TEXT("Polar night: the Sun does not rise today\n");
+    }
+    const int32 DayMin = FMath::RoundToInt(R.Today.DayLengthHours * 60.0);
+    Text += FString::Printf(TEXT("Solar noon %s at %.1f deg     Daylight %d h %02d min\n"), *Clock(R.Today.SolarNoonSim), R.Today.NoonElevationDeg, DayMin / 60, DayMin % 60);
+    if (R.ShadowLengthPerMeter > 0.0)
+    {
+        Text += FString::Printf(TEXT("Shadow of a 1 m stick: %.2f m toward %.0f deg (%s)\n"), R.ShadowLengthPerMeter, R.ShadowAzimuthDeg,
+            *UAstroSiteSubsystem::CompassName(R.ShadowAzimuthDeg, false));
+    }
+    Text += TEXT("\nPaths: yellow today, orange 21 Jun, blue 21 Dec, white equinox.  [ ] change the time speed, L live.");
+    SiteText->SetText(FText::FromString(Text));
 }
 
 void UAstroHUDWidget::UpdateTimeBar()
@@ -227,7 +418,15 @@ void UAstroHUDWidget::UpdateTimeBar()
     {
         return;
     }
-    DateText->SetText(FText::FromString(Time->GetSimulatedDateTime().ToString(TEXT("%Y-%m-%d  %H:%M:%S UTC"))));
+    // Local time: the site's zone when one is set (astro.Site), else this computer's.
+    const double ZoneHours = bHasSiteZone ? SiteZoneHours : (FDateTime::Now() - FDateTime::UtcNow()).GetTotalHours();
+    const int32 ZoneMinutes = FMath::RoundToInt(ZoneHours * 60.0);
+    const FDateTime Local = Time->GetSimulatedDateTime() + FTimespan::FromMinutes(ZoneMinutes);
+    DateText->SetText(FText::FromString(FString::Printf(TEXT("%s UTC   %s local (UTC%c%02d:%02d)"),
+        *Time->GetSimulatedDateTime().ToString(TEXT("%Y-%m-%d  %H:%M:%S")), *Local.ToString(TEXT("%H:%M")),
+        ZoneMinutes < 0 ? TEXT('-') : TEXT('+'), FMath::Abs(ZoneMinutes) / 60, FMath::Abs(ZoneMinutes) % 60)));
+    LiveLabel->SetText(FText::FromString(Time->IsLive() ? TEXT(" LIVE ") : TEXT(" go live ")));
+    LiveLabel->SetColorAndOpacity(FSlateColor(Time->IsLive() ? FLinearColor(0.35f, 1.0f, 0.45f, 1.0f) : Dim));
     ScaleText->SetText(FText::FromString(AstroUIFormat::TimeScale(Time->GetTimeScale(), Time->IsPaused())));
     PauseLabel->SetText(FText::FromString(Time->IsPaused() ? TEXT("  >  ") : TEXT(" || ")));
     RewindLabel->SetText(FText::FromString(Time->IsRewinding() ? TEXT(">>") : TEXT("<<")));
@@ -314,6 +513,12 @@ void UAstroHUDWidget::UpdateFacts()
 {
     const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
     const int32 Index = Sim && Sim->IsReady() ? Sim->FindBodyIndex(SelectedBody) : INDEX_NONE;
+    const UAstroScaleDomainSubsystem* Domains = UAstroScaleDomainSubsystem::Get(this);
+    if (Domains && Domains->GetDomain() == EAstroScaleDomain::Galaxy)
+    {
+        FactsPanel->SetVisibility(ESlateVisibility::Collapsed); // solar-system facts don't apply out here
+        return;
+    }
     if (Index == INDEX_NONE)
     {
         return;
@@ -404,6 +609,17 @@ void UAstroHUDWidget::OnPauseClicked()
 void UAstroHUDWidget::OnSlowerClicked()
 {
     if (UTimeController* Time = UTimeController::Get(this)) { Time->StepTimeScale(-1); }
+}
+
+void UAstroHUDWidget::OnLiveClicked()
+{
+    if (UTimeController* Time = UTimeController::Get(this)) { Time->GoLive(); }
+}
+
+void UAstroHUDWidget::SetSiteTimeZone(bool bEnabled, double UtcOffsetHours)
+{
+    bHasSiteZone = bEnabled;
+    SiteZoneHours = UtcOffsetHours;
 }
 
 void UAstroHUDWidget::OnFasterClicked()

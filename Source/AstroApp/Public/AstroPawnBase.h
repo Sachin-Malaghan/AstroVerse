@@ -11,6 +11,10 @@
 //   surface. Switching keeps position, and rotates orientation and velocity with the basis.
 // - Flying: speed scales with altitude above the reference body (walking pace at the
 //   ground, AU/s between planets). Walking: kinematic, on FBodyTerrain, with real gravity.
+// - Orbiting: the camera circles a focused body and looks at it; the wheel zooms on a log
+//   scale from interplanetary distance down to tens of metres above the real terrain. Close
+//   in, the orbit co-rotates with the body so you stay over the same ground.
+// - Home: an always-available reset to a known view (Earth, sunlit side), from anywhere.
 
 class UAstroFloatingOriginComponent;
 class UAstroSimulationSubsystem;
@@ -59,6 +63,25 @@ public:
 
     // Zeroes velocity and returns to flight (dev camera placement, travel arrival).
     void StopMotion() { Velocity = FVector::ZeroVector; Locomotion = EAstroLocomotion::Flying; }
+
+    // Orbit camera around a body. DistanceRadii <= 0 keeps the current distance when close
+    // (otherwise flies in to 3.5 radii). bInstant snaps instead of flying in.
+    void FocusOn(FName BodyID, double DistanceRadii = 0.0, bool bInstant = false);
+    // Orbit around a body from a direction given as phase (Sun-body-camera) and elevation angles.
+    void FocusOnFromSunSide(FName BodyID, double DistanceRadii, double PhaseDeg, double ElevationDeg, bool bInstant);
+    void StopOrbiting() { bOrbiting = false; }
+    bool IsOrbiting() const { return bOrbiting; }
+    FName GetOrbitBody() const;
+    // Slow automatic orbit (deg/s about the body's pole), for the guided tour. 0 = off.
+    void SetOrbitDrift(double DegPerSecond) { OrbitDriftDegPerSecond = DegPerSecond; }
+    // Reset: back to the solar system and the home view. Works from the galaxy and mid-flight.
+    void GoHome();
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Astro|Pawn")
+    FName HomeBody = TEXT("Earth");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Astro|Pawn")
+    double HomeDistanceRadii = 3.5;
 
     // Moves the pawn to a sim position (and orientation) through the current frame.
     void TeleportToSim(const FAstroVector3d& SimPosition, const FQuat& EngineRotation);
@@ -117,8 +140,24 @@ private:
     void TickFlying(UAstroSimulationSubsystem* Sim, float DeltaSeconds);
     void TickWalking(UAstroSimulationSubsystem* Sim, float DeltaSeconds);
     void TickGalaxyFlight(const FGalaxyView& Galaxy, float DeltaSeconds);
+    void TickOrbit(UAstroSimulationSubsystem* Sim, float DeltaSeconds);
+    // Radius of the body's surface (terrain or cloud tops) under a sim-frame direction.
+    double SurfaceRadius(const UAstroSimulationSubsystem* Sim, int32 Body, const FAstroVector3d& Dir) const;
+    UFUNCTION() void HandleTravelArrived(FName BodyID);
+    UFUNCTION() void HandleTravelStarted(FName BodyID);
+    void HandleTourCamera(FName BodyID, double DistanceRadii, double PhaseDeg, double ElevationDeg, double DriftDegPerSecond, bool bUseSide);
     // Local up at the pawn (engine space) and height above the terrain there.
     bool SampleGround(const UAstroSimulationSubsystem* Sim, FVector& OutUp, double& OutHeightAboveGround, double& OutGravity) const;
     double SphereOfInfluence(const UAstroSimulationSubsystem* Sim, int32 Body) const;
     bool bFacedInitialBody = false;
+
+    // Orbit camera state (sim frame). Dir points from the body centre to the camera.
+    bool bOrbiting = false;
+    bool bPendingHome = false;
+    int32 OrbitBody = INDEX_NONE;
+    FAstroVector3d OrbitDir, OrbitTargetDir;
+    double OrbitLogAltitude = 0.0, OrbitTargetLogAltitude = 0.0; // ln(metres above the surface)
+    double OrbitLastSimSeconds = 0.0;
+    double OrbitDriftDegPerSecond = 0.0;
+    FQuat OrbitView = FQuat::Identity;
 };

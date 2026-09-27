@@ -21,6 +21,12 @@ class ASTRORENDERING_API AAstroSpaceEnvironment : public AActor
     GENERATED_BODY()
 
 public:
+    // Galactic axes in the sim (J2000 ecliptic) frame: X to the galactic centre, Z to the
+    // north galactic pole. The Milky Way band in every sky lies along the X-Y plane.
+    void GetGalacticAxes(FAstroVector3d& OutX, FAstroVector3d& OutY, FAstroVector3d& OutZ) const { OutX = GalacticX; OutY = GalacticY; OutZ = GalacticZ; }
+    // Milky Way guide (V): brighter band plus labels, for teaching.
+    static bool IsMilkyWayGuideOn();
+
     AAstroSpaceEnvironment();
 
     virtual void BeginPlay() override;

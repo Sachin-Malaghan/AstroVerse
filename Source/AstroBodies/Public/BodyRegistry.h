@@ -36,6 +36,9 @@ struct ASTROBODIES_API FBodyDefinition
     FAstroMatrix3d EquatorFrameToEcliptic;
     double PrimeMeridianAtEpochRad = 0.0;
     double RotationRateRadPerSec = 0.0;
+    // Pole at J2000 and its secular drift (deg, deg per Julian century); 0 drift = fixed frame.
+    double PoleRADeg = 0.0, PoleDecDeg = 90.0;
+    double PoleRARateDegPerCentury = 0.0, PoleDecRateDegPerCentury = 0.0;
 
     FString Notes;
 

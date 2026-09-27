@@ -19,6 +19,8 @@ public:
     float CoronaExtent = 6.0f;
 
     void SetCoronaLuminance(double Luminance);
+    // Photosphere luminance, for the far-away point-source glow.
+    void SetDiskLuminance(double Luminance) { DiskLuminance = Luminance; }
 
     virtual void OnRegister() override;
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
@@ -26,4 +28,6 @@ public:
 private:
     UPROPERTY(Transient)
     TObjectPtr<class UMaterialInstanceDynamic> CoronaMID;
+    double DiskLuminance = 0.0;
+    float AppliedExtent = 0.0f;
 };

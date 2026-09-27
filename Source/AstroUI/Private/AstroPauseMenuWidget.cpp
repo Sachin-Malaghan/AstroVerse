@@ -3,6 +3,9 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
+#include "Components/EditableTextBox.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Components/SizeBox.h"
@@ -73,6 +76,24 @@ void UAstroPauseMenuWidget::Build()
     UTextBlock* Style = nullptr;
     UTextBlock* Clock = nullptr;
     AddButton(Box, TEXT("Resume"))->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnResumeClicked);
+    AddButton(Box, TEXT("Guided tour: Sun to the Milky Way   (F2)"))->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnTourClicked);
+    AddButton(Box, TEXT("Return home - Earth   (Home)"))->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnHomeClicked);
+
+    // Sun at a site: stand on a place on Earth and see its real sky.
+    UTextBlock* SiteHeader = NewText(WidgetTree, 16, FLinearColor(1.0f, 0.78f, 0.45f, 1.0f));
+    SiteHeader->SetText(FText::FromString(TEXT("Sun at a site  (latitude N+, longitude E+, UTC offset in hours)")));
+    SiteHeader->SetAutoWrapText(true);
+    Box->AddChildToVerticalBox(SiteHeader)->SetPadding(FMargin(0, 12, 0, 4));
+    UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
+    Box->AddChildToVerticalBox(Row);
+    LatBox = AddField(Row, TEXT("latitude"), TEXT("28.6139"), 90.0f);
+    LonBox = AddField(Row, TEXT("longitude"), TEXT("77.2090"), 90.0f);
+    ZoneBox = AddField(Row, TEXT("UTC +h"), TEXT("5.5"), 60.0f);
+    NameBox = AddField(Row, TEXT("name"), TEXT("New Delhi"), 150.0f);
+    AddButton(Box, TEXT("Go to site"))->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnSiteClicked);
+    AddButton(Box, TEXT("Clear site"))->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnClearSiteClicked);
+    SiteStatus = NewText(WidgetTree, 12, FLinearColor(0.62f, 0.68f, 0.78f, 1.0f));
+    Box->AddChildToVerticalBox(SiteStatus)->SetPadding(FMargin(0, 2, 0, 8));
     AddButton(Box, TEXT(""), &Style)->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnStyleClicked);
     AddButton(Box, TEXT(""), &Clock)->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnClockClicked);
     StyleLabel = Style;
@@ -152,6 +173,56 @@ void UAstroPauseMenuWidget::OnDarkerClicked()
 void UAstroPauseMenuWidget::OnCreditsClicked()
 {
     CreditsText->SetVisibility(CreditsText->IsVisible() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+}
+
+UEditableTextBox* UAstroPauseMenuWidget::AddField(UHorizontalBox* Row, const FString& Hint, const FString& Default, float Width)
+{
+    UEditableTextBox* Field = WidgetTree->ConstructWidget<UEditableTextBox>();
+    Field->SetHintText(FText::FromString(Hint));
+    Field->SetText(FText::FromString(Default));
+    UHorizontalBoxSlot* FieldSlot = Row->AddChildToHorizontalBox(Field);
+    FieldSlot->SetPadding(FMargin(0, 0, 4, 0));
+    FSlateChildSize Size(ESlateSizeRule::Fill);
+    Size.Value = Width; // relative share of the row
+    FieldSlot->SetSize(Size);
+    return Field;
+}
+
+void UAstroPauseMenuWidget::OnTourClicked()
+{
+    OnCommand.ExecuteIfBound(TEXT("Tour"));
+}
+
+void UAstroPauseMenuWidget::OnHomeClicked()
+{
+    OnCommand.ExecuteIfBound(TEXT("Home"));
+}
+
+void UAstroPauseMenuWidget::OnClearSiteClicked()
+{
+    OnCommand.ExecuteIfBound(TEXT("ClearSite"));
+}
+
+void UAstroPauseMenuWidget::OnSiteClicked()
+{
+    auto Parse = [](const UEditableTextBox* Field, double Min, double Max, double& Out)
+    {
+        const FString Text = Field->GetText().ToString().TrimStartAndEnd();
+        if (Text.IsEmpty() || !Text.IsNumeric())
+        {
+            return false;
+        }
+        Out = FCString::Atod(*Text);
+        return Out >= Min && Out <= Max;
+    };
+    double Lat = 0.0, Lon = 0.0, Zone = 0.0;
+    if (!Parse(LatBox, -90.0, 90.0, Lat) || !Parse(LonBox, -180.0, 360.0, Lon) || !Parse(ZoneBox, -14.0, 14.0, Zone))
+    {
+        SiteStatus->SetText(FText::FromString(TEXT("Latitude -90..90, longitude -180..180 (east positive), UTC offset -14..14 hours.")));
+        return;
+    }
+    SiteStatus->SetText(FText::FromString(FString::Printf(TEXT("Going to %.4f, %.4f ..."), Lat, Lon)));
+    OnSiteRequest.ExecuteIfBound(Lat, Lon, Zone, NameBox->GetText().ToString());
 }
 
 void UAstroPauseMenuWidget::OnQuitClicked()

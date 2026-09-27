@@ -61,6 +61,16 @@ void UAstroUISubsystem::Create(APlayerController* PC, bool bVR)
     }
     Menu = CreateWidget<UAstroPauseMenuWidget>(PC, UAstroPauseMenuWidget::StaticClass());
     Menu->OnResume.BindUObject(this, &UAstroUISubsystem::ToggleMenu);
+    Menu->OnSiteRequest.BindLambda([this](double Lat, double Lon, double Zone, const FString& Name)
+    {
+        ToggleMenu();
+        OnSiteRequested.Broadcast(Lat, Lon, Zone, Name);
+    });
+    Menu->OnCommand.BindLambda([this](FName Command)
+    {
+        ToggleMenu();
+        OnCommand.Broadcast(Command);
+    });
 
     UWorld* World = PC->GetWorld();
     if (UAstroActivationSubsystem* Activation = UAstroActivationSubsystem::Get(World))
@@ -96,11 +106,27 @@ void UAstroUISubsystem::SetViewerStatus(const FString& Status)
     }
 }
 
-void UAstroUISubsystem::ShowToast(const FString& Message)
+void UAstroUISubsystem::ShowToast(const FString& Message, float Seconds)
 {
     if (HUD)
     {
-        HUD->ShowToast(Message);
+        HUD->ShowToast(Message, Seconds);
+    }
+}
+
+void UAstroUISubsystem::ShowCaption(const FString& Title, const FString& Text, const FString& Footer)
+{
+    if (HUD)
+    {
+        HUD->ShowCaption(Title, Text, Footer);
+    }
+}
+
+void UAstroUISubsystem::HideCaption()
+{
+    if (HUD)
+    {
+        HUD->HideCaption();
     }
 }
 
@@ -110,6 +136,14 @@ void UAstroUISubsystem::ToggleHUD()
     {
         bHUDHidden = !bHUDHidden;
         HUD->SetVisibility(bHUDHidden ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+    }
+}
+
+void UAstroUISubsystem::SetSiteTimeZone(bool bEnabled, double UtcOffsetHours)
+{
+    if (HUD)
+    {
+        HUD->SetSiteTimeZone(bEnabled, UtcOffsetHours);
     }
 }
 

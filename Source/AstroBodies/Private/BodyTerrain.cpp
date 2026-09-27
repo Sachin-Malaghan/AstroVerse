@@ -1,5 +1,9 @@
 // See CLAUDE.md Phase 8.
 #include "BodyTerrain.h"
+#include "HAL/PlatformFileManager.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
 #include "Math/AstroConstants.h"
@@ -136,11 +140,107 @@ bool FEquirectMap::LoadFromFile(const FString& Path)
     return true;
 }
 
+bool FEquirectMap::LoadRawDEM(const FString& Path, const FString& DescriptorPath)
+{
+    FString Json;
+    TSharedPtr<FJsonObject> Desc;
+    if (!FFileHelper::LoadFileToString(Json, *DescriptorPath)
+        || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Desc) || !Desc.IsValid())
+    {
+        return false;
+    }
+    const FString Format = Desc->GetStringField(TEXT("format"));
+    const int32 W = static_cast<int32>(Desc->GetNumberField(TEXT("width")));
+    const int32 H = static_cast<int32>(Desc->GetNumberField(TEXT("height")));
+    const int32 BytesPer = Format.StartsWith(TEXT("float32")) ? 4 : 2;
+    const bool bBigEndian = Format.EndsWith(TEXT("be"));
+    TUniquePtr<IFileHandle> File(FPlatformFileManager::Get().GetPlatformFile().OpenRead(*Path));
+    if (!File || W <= 0 || H <= 0 || File->Size() != static_cast<int64>(W) * H * BytesPer)
+    {
+        return false;
+    }
+    const double DescScale = Desc->GetNumberField(TEXT("scale_m"));
+    const double DescOffset = Desc->GetNumberField(TEXT("offset_m"));
+    DEM.SetNumUninitialized(static_cast<int64>(W) * H);
+    // Float grids are stored as whole metres (int16 covers -32 km..+32 km): half the memory.
+    Scale = BytesPer == 4 ? 1.0 : DescScale;
+    Offset = BytesPer == 4 ? 0.0 : DescOffset;
+    TArray<uint8> Row;
+    Row.SetNumUninitialized(W * BytesPer);
+    for (int32 Y = 0; Y < H; ++Y)
+    {
+        if (!File->Read(Row.GetData(), Row.Num()))
+        {
+            DEM.Reset();
+            return false;
+        }
+        int16* Out = DEM.GetData() + static_cast<int64>(Y) * W;
+        for (int32 X = 0; X < W; ++X)
+        {
+            const uint8* B = Row.GetData() + X * BytesPer;
+            if (BytesPer == 2)
+            {
+                const uint16 U = bBigEndian ? (uint16(B[0]) << 8 | B[1]) : (uint16(B[1]) << 8 | B[0]);
+                Out[X] = static_cast<int16>(U);
+            }
+            else
+            {
+                const uint32 U = bBigEndian ? (uint32(B[0]) << 24 | uint32(B[1]) << 16 | uint32(B[2]) << 8 | B[3])
+                                            : (uint32(B[3]) << 24 | uint32(B[2]) << 16 | uint32(B[1]) << 8 | B[0]);
+                float F;
+                FMemory::Memcpy(&F, &U, 4);
+                Out[X] = static_cast<int16>(FMath::Clamp(FMath::RoundToInt(F * DescScale + DescOffset), -32768, 32767));
+            }
+        }
+    }
+    Width = W;
+    Height = H;
+    Lon0Deg = Desc->GetNumberField(TEXT("lon0_deg"));
+    Lat0Deg = Desc->HasField(TEXT("lat0_deg")) ? Desc->GetNumberField(TEXT("lat0_deg")) : 90.0;
+    bSouthUp = Desc->GetBoolField(TEXT("south_up"));
+    Values.Reset();
+    return true;
+}
+
+double FEquirectMap::SampleMeters(const FAstroVector3d& Dir, double* OutLocalRange) const
+{
+    const double LonDeg = FMath::RadiansToDegrees(std::atan2(Dir.Y, Dir.X));
+    const double LatDeg = FMath::RadiansToDegrees(std::atan2(Dir.Z * LatitudeZScale, FMath::Sqrt(Dir.X * Dir.X + Dir.Y * Dir.Y)));
+    const double Step = 360.0 / Width;
+    // Continuous pixel coordinates with pixel centres at integers.
+    double U = (LonDeg - Lon0Deg) / Step - 0.5;
+    U -= std::floor(U / Width) * Width;
+    const double V = (bSouthUp ? LatDeg - Lat0Deg : Lat0Deg - LatDeg) / (180.0 / Height) - 0.5;
+    auto At = [this](int32 X, int32 Y) -> double
+    {
+        X = ((X % Width) + Width) % Width;
+        Y = FMath::Clamp(Y, 0, Height - 1);
+        return DEM[static_cast<int64>(Y) * Width + X];
+    };
+    auto Bilinear = [&](double PU, double PV)
+    {
+        const int32 BX = FMath::FloorToInt(PU), BY = FMath::FloorToInt(PV);
+        const double FX = PU - BX, FY = PV - BY;
+        return FMath::Lerp(FMath::Lerp(At(BX, BY), At(BX + 1, BY), FX), FMath::Lerp(At(BX, BY + 1), At(BX + 1, BY + 1), FX), FY);
+    };
+    const double Center = Bilinear(U, V);
+    if (OutLocalRange)
+    {
+        // Spread of bilinear samples one pixel away: continuous everywhere (a corner-based
+        // range would jump at every pixel boundary and put steps in the scaled detail).
+        const double E = Bilinear(U + 1.0, V), W = Bilinear(U - 1.0, V), N = Bilinear(U, V - 1.0), S = Bilinear(U, V + 1.0);
+        const double Hi = FMath::Max(FMath::Max(FMath::Max(E, W), FMath::Max(N, S)), Center);
+        const double Lo = FMath::Min(FMath::Min(FMath::Min(E, W), FMath::Min(N, S)), Center);
+        *OutLocalRange = (Hi - Lo) * FMath::Abs(Scale);
+    }
+    return Center * Scale + Offset;
+}
+
 float FEquirectMap::Sample(const FAstroVector3d& Dir) const
 {
     // Matches the surface shader: u = 0.5 + east longitude / 2pi, v = 0.5 - latitude / pi.
     const double Lon = std::atan2(Dir.Y, Dir.X);
-    const double Lat = std::asin(FMath::Clamp(Dir.Z, -1.0, 1.0));
+    const double Lat = std::atan2(Dir.Z * LatitudeZScale, FMath::Sqrt(Dir.X * Dir.X + Dir.Y * Dir.Y));
     const double U = (0.5 + Lon / AstroConstants::TwoPi) * Width - 0.5;
     const double V = (0.5 - Lat / AstroConstants::Pi) * Height - 0.5;
     const int32 X0 = FMath::FloorToInt(U), Y0 = FMath::FloorToInt(V);
@@ -162,13 +262,35 @@ void FBodyTerrain::Initialize(const FAstroTerrainRow& InRow, FName SeedName, dou
     Req = EquatorialRadius;
     Rpol = PolarRadius;
     Seed = GetTypeHash(SeedName.ToString());
+    const double LatScale = Row.bGeodeticLatitude ? (Req * Req) / (Rpol * Rpol) : 1.0;
+    OceanMask.LatitudeZScale = LatScale;
+    Heightmap.LatitudeZScale = LatScale;
     if (!Row.OceanMaskFile.IsEmpty() && !OceanMask.LoadFromFile(FPaths::Combine(ContentDir, Row.OceanMaskFile)))
     {
         UE_LOG(LogAstroTerrain, Warning, TEXT("%s: ocean mask '%s' not loaded; no oceans."), *SeedName.ToString(), *Row.OceanMaskFile);
     }
-    if (!Row.HeightmapFile.IsEmpty() && !Heightmap.LoadFromFile(FPaths::Combine(ContentDir, Row.HeightmapFile)))
+    if (!Row.HeightmapFile.IsEmpty())
     {
-        UE_LOG(LogAstroTerrain, Warning, TEXT("%s: heightmap '%s' not loaded; procedural relief only."), *SeedName.ToString(), *Row.HeightmapFile);
+        const FString Path = FPaths::Combine(ContentDir, Row.HeightmapFile);
+        const FString Descriptor = Path + TEXT(".json");
+        const double Start = FPlatformTime::Seconds();
+        const bool bLoaded = FPaths::FileExists(Descriptor) ? Heightmap.LoadRawDEM(Path, Descriptor) : Heightmap.LoadFromFile(Path);
+        if (bLoaded && Heightmap.IsRawDEM())
+        {
+            UE_LOG(LogAstroTerrain, Log, TEXT("%s: real elevation %dx%d (%.0f m/px) loaded in %.2f s"), *SeedName.ToString(),
+                Heightmap.Width, Heightmap.Height, Heightmap.PixelSizeMeters(Req), FPlatformTime::Seconds() - Start);
+        }
+        else if (!bLoaded)
+        {
+            UE_LOG(LogAstroTerrain, Warning, TEXT("%s: heightmap '%s' not loaded (run Tools/Data/fetch_dems.py); procedural relief only."),
+                *SeedName.ToString(), *Row.HeightmapFile);
+            if (Row.FallbackReliefAmplitudeM > 0.0)
+            {
+                Row.ReliefAmplitudeM = Row.FallbackReliefAmplitudeM;
+                Row.BaseWavelengthKm = Row.FallbackBaseWavelengthKm;
+                Row.CraterMaxRadiusKm = Row.FallbackCraterMaxRadiusKm;
+            }
+        }
     }
 }
 
@@ -282,10 +404,24 @@ double FBodyTerrain::HeightAt(const FAstroVector3d& Dir, double MinFeatureMeters
     {
         return 0.0;
     }
-    double Height = FractalRelief(Dir, MinFeatureMeters) + MicroRelief(Dir, MinFeatureMeters) + Craters(Dir, MinFeatureMeters);
-    if (Heightmap.IsValid())
+    double Height;
+    if (Heightmap.IsRawDEM())
     {
-        Height += FMath::Lerp(Row.HeightmapMinM, Row.HeightmapMaxM, static_cast<double>(Heightmap.Sample(Dir)));
+        // Real elevation plus procedural detail below the grid spacing. The fractal detail is
+        // scaled by the DEM's local ruggedness so plains (a farm, a building plot) stay flat
+        // while mountains get sub-pixel ridges; craters and micro-relief are everywhere.
+        double LocalRange = 0.0;
+        const double DEMHeight = Heightmap.SampleMeters(Dir, &LocalRange);
+        const double Rugged = Row.ReliefAmplitudeM > 0.0 ? FMath::Clamp(LocalRange / (4.0 * Row.ReliefAmplitudeM), 0.05, 1.0) : 1.0;
+        Height = DEMHeight + FractalRelief(Dir, MinFeatureMeters) * Rugged + MicroRelief(Dir, MinFeatureMeters) + Craters(Dir, MinFeatureMeters);
+    }
+    else
+    {
+        Height = FractalRelief(Dir, MinFeatureMeters) + MicroRelief(Dir, MinFeatureMeters) + Craters(Dir, MinFeatureMeters);
+        if (Heightmap.IsValid())
+        {
+            Height += FMath::Lerp(Row.HeightmapMinM, Row.HeightmapMaxM, static_cast<double>(Heightmap.Sample(Dir)));
+        }
     }
     if (OceanMask.IsValid())
     {

@@ -22,6 +22,16 @@ namespace
         }));
 
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdTimePause(
+        TEXT("astro.Time.Live"), TEXT("Lock the clock to real UTC (network-corrected when online)"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+        {
+            if (UTimeController* Time = TimeFor(World))
+            {
+                Time->GoLive();
+            }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdTimePauseCmd(
         TEXT("astro.Time.Pause"), TEXT("Pause the simulation clock"),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
         {
@@ -59,8 +69,10 @@ namespace
         {
             if (const UTimeController* Time = TimeFor(World))
             {
-                UE_LOG(LogTemp, Display, TEXT("Sim date %s UTC, scale %.6g s/s, %s"),
-                    *Time->GetSimulatedDateTime().ToIso8601(), Time->GetTimeScale(), Time->IsPaused() ? TEXT("paused") : TEXT("running"));
+                UE_LOG(LogTemp, Display, TEXT("Sim date %s UTC, scale %.6g s/s, %s%s; real UTC %s from %s (offset %+.2f s)"),
+                    *Time->GetSimulatedDateTime().ToIso8601(), Time->GetTimeScale(), Time->IsPaused() ? TEXT("paused") : TEXT("running"),
+                    Time->IsLive() ? TEXT(", LIVE") : TEXT(""), *Time->GetRealUtcNow().ToIso8601(),
+                    *Time->GetNetworkTime().GetSourceDescription(), Time->GetNetworkTime().GetOffsetSeconds());
             }
         }));
 }

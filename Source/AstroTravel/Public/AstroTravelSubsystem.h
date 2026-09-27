@@ -27,9 +27,10 @@ public:
 
     static UAstroTravelSubsystem* Get(const UObject* WorldContext);
 
-    // Starts a transit to BodyID with the user's chosen style. False if already travelling or unknown.
+    // Starts a transit to BodyID with the user's chosen style (or always the cinematic warp,
+    // e.g. for the guided tour). False if already travelling or unknown.
     UFUNCTION(BlueprintCallable, Category = "Astro|Travel")
-    bool BeginTravel(FName BodyID);
+    bool BeginTravel(FName BodyID, bool bForceCinematic = false);
 
     // Arrives immediately (skip).
     UFUNCTION(BlueprintCallable, Category = "Astro|Travel")

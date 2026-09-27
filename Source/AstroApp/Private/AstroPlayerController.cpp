@@ -16,6 +16,11 @@
 #include "InputActionValue.h"
 #include "StereoRendering.h"
 #include "TimeController.h"
+#include "HAL/IConsoleManager.h"
+#include "AstroTourSubsystem.h"
+#include "AstroSiteSubsystem.h"
+#include "AstroScaleDomainSubsystem.h"
+#include "AstroSimulationSubsystem.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAstroController, Log, All);
 
@@ -49,12 +54,101 @@ void AAstroPlayerController::BeginPlay()
     {
         const bool bVR = GEngine && GEngine->StereoRenderingDevice.IsValid() && GEngine->StereoRenderingDevice->IsStereoEnabled();
         UI->Create(this, bVR);
+        UI->OnSiteRequested.AddWeakLambda(this, [this](double Lat, double Lon, double Zone, const FString& Name)
+        {
+            GoToSite(TEXT("Earth"), Lat, Lon, Zone, Name);
+        });
+        UI->OnCommand.AddUObject(this, &AAstroPlayerController::HandleUICommand);
+    }
+}
+
+void AAstroPlayerController::HandleUICommand(FName Command)
+{
+    AAstroPawnBase* Viewer = Cast<AAstroPawnBase>(GetPawn());
+    if (Command == TEXT("Tour"))
+    {
+        ToggleTour();
+    }
+    else if (Command == TEXT("Home") && Viewer)
+    {
+        Viewer->GoHome();
+    }
+    else if (Command == TEXT("ClearSite"))
+    {
+        ClearSite();
+    }
+}
+
+void AAstroPlayerController::GoToSite(FName Body, double LatDeg, double LonDeg, double UtcOffsetHours, const FString& Name)
+{
+    PendingSite = FPendingSite{ Body, LatDeg, LonDeg, UtcOffsetHours, Name };
+    if (UAstroTourSubsystem* Tour = UAstroTourSubsystem::Get(this); Tour && Tour->IsRunning())
+    {
+        Tour->Stop();
+    }
+    if (UAstroScaleDomainSubsystem* Domains = UAstroScaleDomainSubsystem::Get(this); Domains && Domains->GetDomain() == EAstroScaleDomain::Galaxy)
+    {
+        Domains->RequestDomain(EAstroScaleDomain::SolarSystem); // finishes in PlayerTick once back
+        return;
+    }
+    FinishGoToSite();
+}
+
+void AAstroPlayerController::FinishGoToSite()
+{
+    UAstroSiteSubsystem* Site = UAstroSiteSubsystem::Get(this);
+    UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    AAstroPawnBase* Viewer = Cast<AAstroPawnBase>(GetPawn());
+    if (!PendingSite.IsSet() || !Site || !Sim || !Sim->IsReady() || !Viewer)
+    {
+        return;
+    }
+    const FPendingSite P = PendingSite.GetValue();
+    PendingSite.Reset();
+    Site->SetSite(P.Body, P.Lat, P.Lon, P.Zone, P.Name);
+    if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this))
+    {
+        UI->SetSiteTimeZone(true, P.Zone);
+    }
+    // Stand 4 m south of the gnomon, facing north over the compass, then walk.
+    FVector Ground, East, North, Up;
+    if (Site->GetSiteFrame(Ground, East, North, Up))
+    {
+        Viewer->StopOrbiting();
+        Viewer->StopMotion();
+        const FVector Stand = Ground - North * 400.0 + Up * 180.0;
+        Viewer->TeleportToSim(Sim->EngineToSimPosition(Stand), FRotationMatrix::MakeFromXZ(North, Up).ToQuat());
+        Viewer->ToggleLanding();
+    }
+    if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this))
+    {
+        UI->ShowToast(FString::Printf(TEXT("At %s: look up for the Sun's paths; the stick's shadow is real.  [ ] run time faster, L back to live."), *P.Name), 8.0f);
+    }
+}
+
+void AAstroPlayerController::ClearSite()
+{
+    if (UAstroSiteSubsystem* Site = UAstroSiteSubsystem::Get(this))
+    {
+        Site->ClearSite();
+    }
+    if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this))
+    {
+        UI->SetSiteTimeZone(false, 0.0);
     }
 }
 
 void AAstroPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+    if (PendingSite.IsSet())
+    {
+        const UAstroScaleDomainSubsystem* Domains = UAstroScaleDomainSubsystem::Get(this);
+        if (!Domains || (!Domains->IsTransitioning() && Domains->GetDomain() == EAstroScaleDomain::SolarSystem))
+        {
+            FinishGoToSite();
+        }
+    }
     UAstroUISubsystem* UI = UAstroUISubsystem::Get(this);
     const AAstroPawnBase* Viewer = Cast<AAstroPawnBase>(GetPawn());
     const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
@@ -93,6 +187,12 @@ void AAstroPlayerController::SetupInputComponent()
         EIC->BindAction(InputActions->Menu, ETriggerEvent::Started, this, &AAstroPlayerController::OnMenuAction);
         EIC->BindAction(InputActions->Travel, ETriggerEvent::Started, this, &AAstroPlayerController::OnTravelAction);
         EIC->BindAction(InputActions->Help, ETriggerEvent::Started, this, &AAstroPlayerController::OnHelpAction);
+        EIC->BindAction(InputActions->Focus, ETriggerEvent::Started, this, &AAstroPlayerController::OnFocusAction);
+        EIC->BindAction(InputActions->Home, ETriggerEvent::Started, this, &AAstroPlayerController::OnHomeAction);
+        EIC->BindAction(InputActions->GoLive, ETriggerEvent::Started, this, &AAstroPlayerController::OnGoLiveAction);
+        EIC->BindAction(InputActions->Tour, ETriggerEvent::Started, this, &AAstroPlayerController::OnTourAction);
+        EIC->BindAction(InputActions->TourNext, ETriggerEvent::Started, this, &AAstroPlayerController::OnTourNextAction);
+        EIC->BindAction(InputActions->MilkyWayGuide, ETriggerEvent::Started, this, &AAstroPlayerController::OnMilkyWayGuideAction);
     }
 }
 
@@ -206,6 +306,82 @@ void AAstroPlayerController::OnMenuAction(const FInputActionValue& Value)
 {
     if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this)) { UI->ToggleMenu(); }
     OnMenu.Broadcast();
+}
+
+void AAstroPlayerController::OnFocusAction(const FInputActionValue& Value)
+{
+    AAstroPawnBase* Viewer = Cast<AAstroPawnBase>(GetPawn());
+    if (!Viewer)
+    {
+        return;
+    }
+    UAstroUISubsystem* UI = UAstroUISubsystem::Get(this);
+    // F toggles: orbit the selection (or the nearest body), or go back to free flight.
+    const FName Target = !SelectedBody.IsNone() ? SelectedBody : Viewer->GetReferenceBody();
+    if (Viewer->IsOrbiting() && (SelectedBody.IsNone() || Viewer->GetOrbitBody() == SelectedBody))
+    {
+        Viewer->StopOrbiting();
+        if (UI) { UI->ShowToast(TEXT("Free flight: WASD to move, mouse to look, wheel sets speed.  F to orbit again.")); }
+        return;
+    }
+    Viewer->FocusOn(Target);
+    if (UI) { UI->ShowToast(FString::Printf(TEXT("Orbiting %s: mouse or A/D to circle, wheel or W/S to zoom, F for free flight."), *Target.ToString())); }
+}
+
+void AAstroPlayerController::OnHomeAction(const FInputActionValue& Value)
+{
+    if (AAstroPawnBase* Viewer = Cast<AAstroPawnBase>(GetPawn()))
+    {
+        Viewer->GoHome();
+        if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this)) { UI->ShowToast(TEXT("Home: back to Earth.  (Home / Backspace any time you're lost.)")); }
+    }
+}
+
+void AAstroPlayerController::OnGoLiveAction(const FInputActionValue& Value)
+{
+    if (UTimeController* Time = UTimeController::Get(this))
+    {
+        Time->GoLive();
+        if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this))
+        {
+            UI->ShowToast(FString::Printf(TEXT("Live: the clock follows real UTC (%s)."), *Time->GetNetworkTime().GetSourceDescription()));
+        }
+    }
+}
+
+void AAstroPlayerController::OnTourAction(const FInputActionValue& Value)
+{
+    ToggleTour();
+}
+
+void AAstroPlayerController::OnTourNextAction(const FInputActionValue& Value)
+{
+    if (UAstroTourSubsystem* Tour = UAstroTourSubsystem::Get(this))
+    {
+        Tour->Next();
+    }
+}
+
+void AAstroPlayerController::OnMilkyWayGuideAction(const FInputActionValue& Value)
+{
+    if (IConsoleVariable* Guide = IConsoleManager::Get().FindConsoleVariable(TEXT("astro.Sky.MilkyWayGuide")))
+    {
+        const bool bOn = Guide->GetInt() == 0;
+        Guide->Set(bOn ? 1 : 0, ECVF_SetByCode);
+        if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this))
+        {
+            UI->ShowToast(bOn ? TEXT("Milky Way guide on: the band is our galaxy's disc seen edge-on from inside.  V to hide.")
+                              : TEXT("Milky Way guide off."));
+        }
+    }
+}
+
+void AAstroPlayerController::ToggleTour()
+{
+    if (UAstroTourSubsystem* Tour = UAstroTourSubsystem::Get(this))
+    {
+        Tour->Toggle();
+    }
 }
 
 void AAstroPlayerController::OnHelpAction(const FInputActionValue& Value)

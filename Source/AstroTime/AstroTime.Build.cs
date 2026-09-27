@@ -14,6 +14,11 @@ public class AstroTime : ModuleRules
             "AstroCore"
         });
 
+        // Live clock: network UTC via the HTTP "Date" header (engine module, not a layer change).
+        PrivateDependencyModuleNames.AddRange(new string[] {
+            "HTTP"
+        });
+
         PrivateDependencyModuleNames.AddRange(new string[] { });
 
         // Layer rule: this module may only depend on modules in its own
