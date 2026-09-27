@@ -1,0 +1,23 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.8",
+  "Category": "",
+  "Description": "Solar System VR — production-scale N-body solar system simulator",
+  "Modules": [
+    { "Name": "AstroCore",       "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "AstroBodies",     "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "AstroTime",       "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "AstroActivation", "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "AstroRendering",  "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "AstroTravel",     "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "AstroGalaxy",     "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "AstroInput",      "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "AstroUI",         "Type": "Runtime", "LoadingPhase": "Default" },
+    { "Name": "AstroApp",        "Type": "Runtime", "LoadingPhase": "Default" }
+  ],
+  "Plugins": [
+    { "Name": "EnhancedInput", "Enabled": true },
+    { "Name": "OpenXR", "Enabled": true },
+    { "Name": "Niagara", "Enabled": true }
+  ]
+}

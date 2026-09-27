@@ -1,0 +1,23 @@
+# Unreal Engine generated/build folders — never commit these
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.slnx
+*.suo
+*.xcodeproj
+*.xcworkspace
+
+# Editor per-user config (keep DefaultX.ini, ignore local overrides)
+Config/UserEngine.ini
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
