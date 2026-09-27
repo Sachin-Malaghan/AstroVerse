@@ -5,6 +5,9 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/DirectionalLightComponent.h"
 #include "Components/PostProcessComponent.h"
+#include "Components/SkyAtmosphereComponent.h"
+#include "AstroBody.h"
+#include "BodyShadingComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
@@ -56,6 +59,12 @@ AAstroSpaceEnvironment::AAstroSpaceEnvironment()
     S.VignetteIntensity = 0.2f;
     S.bOverride_LensFlareIntensity = true;
     S.LensFlareIntensity = 0.3f;
+
+    SkyAtmosphere = CreateDefaultSubobject<USkyAtmosphereComponent>(TEXT("SkyAtmosphere"));
+    SkyAtmosphere->SetupAttachment(PostProcess);
+    SkyAtmosphere->SetUsingAbsoluteLocation(true);
+    SkyAtmosphere->TransformMode = ESkyAtmosphereTransformMode::PlanetCenterAtComponentTransform;
+    SkyAtmosphere->SetVisibility(false);
 }
 
 void AAstroSpaceEnvironment::BeginPlay()
@@ -73,10 +82,9 @@ void AAstroSpaceEnvironment::BeginPlay()
         const FAstroVector3d North = EqToEcl * RaDecToUnit(192.85948, 27.12825);
         FAstroVector3d Center = EqToEcl * RaDecToUnit(266.40499, -28.93617);
         Center = (Center - North * Center.Dot(North)).Normalized();
-        const FAstroVector3d Y = North.Cross(Center);
-        StarFieldMID->SetVectorParameterValue(TEXT("GalX"), ToParam(UAstroSimulationSubsystem::SimToEngineDirection(Center)));
-        StarFieldMID->SetVectorParameterValue(TEXT("GalY"), ToParam(UAstroSimulationSubsystem::SimToEngineDirection(Y)));
-        StarFieldMID->SetVectorParameterValue(TEXT("GalZ"), ToParam(UAstroSimulationSubsystem::SimToEngineDirection(North)));
+        GalacticX = Center;
+        GalacticY = North.Cross(Center);
+        GalacticZ = North;
     }
 }
 
@@ -112,10 +120,19 @@ void AAstroSpaceEnvironment::Tick(float DeltaSeconds)
     // exposure for EV100 is 1 / (1.2 * 2^EV100).
     PostProcess->Settings.AutoExposureBias = static_cast<float>(-(CurrentEV100 + FMath::Log2(1.2)));
 
+    double Daylight = 0.0;
+    UpdateSkyAtmosphere(Sim, CameraSim, Daylight);
+
     if (StarFieldMID)
     {
+        // The sky turns with the frame when landed on a rotating body.
+        StarFieldMID->SetVectorParameterValue(TEXT("GalX"), ToParam(Sim->SimToEngineDirection(GalacticX)));
+        StarFieldMID->SetVectorParameterValue(TEXT("GalY"), ToParam(Sim->SimToEngineDirection(GalacticY)));
+        StarFieldMID->SetVectorParameterValue(TEXT("GalZ"), ToParam(Sim->SimToEngineDirection(GalacticZ)));
+
         // Display-referred brightness converted back to scene luminance at this exposure.
-        const double StarNits = Settings->StarDisplayBrightness * 1.2 * FMath::Pow(2.0, CurrentEV100);
+        // ...and a sunlit sky overhead washes them out.
+        const double StarNits = Settings->StarDisplayBrightness * 1.2 * FMath::Pow(2.0, CurrentEV100) * (1.0 - 0.995 * Daylight);
         StarFieldMID->SetScalarParameterValue(TEXT("StarNits"), static_cast<float>(StarNits));
     }
 
@@ -125,4 +142,105 @@ void AAstroSpaceEnvironment::Tick(float DeltaSeconds)
     {
         Star->SunLight->SetIntensity(static_cast<float>(SunLuxAtCamera));
     }
+}
+
+void AAstroSpaceEnvironment::UpdateSkyAtmosphere(const UAstroSimulationSubsystem* Sim, const FAstroVector3d& CameraSim, double& OutDaylight)
+{
+    // Pick the body whose atmosphere the camera is nearest to, within 10 atmosphere heights.
+    const FBodyRegistry& Registry = Sim->GetRegistry();
+    int32 Best = INDEX_NONE;
+    double BestAltitudeFraction = TNumericLimits<double>::Max();
+    const UBodyShadingComponent* BestShading = nullptr;
+    for (int32 i = 0; i < Registry.Num(); ++i)
+    {
+        const AAstroBody* Body = Sim->GetBodyActor(i);
+        const UBodyShadingComponent* Shading = Body ? Body->FindComponentByClass<UBodyShadingComponent>() : nullptr;
+        if (!Shading || !Shading->HasAtmosphere())
+        {
+            continue;
+        }
+        const double Ground = Registry.Get(i).EquatorialRadiusMeters;
+        const double Height = Shading->GetAtmosphereTopMeters() - Ground;
+        const double Altitude = (CameraSim - Sim->GetSimulation().GetBodyState(i).Position).Length() - Ground;
+        const double Fraction = Altitude / Height;
+        if (Fraction < 10.0 && Fraction < BestAltitudeFraction)
+        {
+            Best = i;
+            BestAltitudeFraction = Fraction;
+            BestShading = Shading;
+        }
+    }
+
+    // Hand shells over to / back from the engine sky.
+    for (int32 i = 0; i < Registry.Num(); ++i)
+    {
+        if (const AAstroBody* Body = Sim->GetBodyActor(i))
+        {
+            if (UBodyShadingComponent* Shading = Body->FindComponentByClass<UBodyShadingComponent>())
+            {
+                Shading->SetShellVisible(i != Best);
+            }
+        }
+    }
+
+    OutDaylight = 0.0;
+    if (Best == INDEX_NONE)
+    {
+        if (SkyBodyIndex != INDEX_NONE)
+        {
+            SkyAtmosphere->SetVisibility(false);
+            SkyBodyIndex = INDEX_NONE;
+        }
+        return;
+    }
+    const FBodyDefinition& Def = Registry.Get(Best);
+    const FAstroVector3d BodyPos = Sim->GetSimulation().GetBodyState(Best).Position;
+    const FAstroVector3d Up = (CameraSim - BodyPos).Normalized();
+
+    // SkyAtmosphere is a sphere but bodies are oblate: use the ellipsoid radius directly below
+    // the camera, less a margin so the sky's own horizon always sits below the mesh horizon.
+    const FAstroVector3d UpBodyFixed = Def.GetOrientationAt(Sim->GetSimulation().GetSimSeconds()).Transposed() * Up;
+    const double A2 = Def.EquatorialRadiusMeters * Def.EquatorialRadiusMeters;
+    const double C2 = Def.PolarRadiusMeters * Def.PolarRadiusMeters;
+    const double LocalRadius = 1.0 / FMath::Sqrt((UpBodyFixed.X * UpBodyFixed.X + UpBodyFixed.Y * UpBodyFixed.Y) / A2 + UpBodyFixed.Z * UpBodyFixed.Z / C2);
+    const double SkyGround = LocalRadius - 1000.0;
+
+    if (SkyBodyIndex != Best)
+    {
+        ConfigureSkyFor(BestShading, SkyGround);
+        SkyAtmosphere->SetVisibility(true);
+        SkyBodyIndex = Best;
+        SkyGroundMeters = SkyGround;
+    }
+    else if (FMath::Abs(SkyGround - SkyGroundMeters) > 100.0)
+    {
+        SkyAtmosphere->SetBottomRadius(static_cast<float>(SkyGround / 1000.0));
+        SkyGroundMeters = SkyGround;
+    }
+    SkyAtmosphere->SetWorldLocation(Sim->SimToEnginePosition(BodyPos));
+
+    // Daylight at the camera: sun above the local horizon, fading with altitude.
+    const FAstroVector3d ToSun = (Sim->GetSimulation().GetBodyState(Registry.GetStarIndex()).Position - CameraSim).Normalized();
+    const double SunElevation = Up.Dot(ToSun);
+    const double Thickness = FMath::Clamp(1.0 - BestAltitudeFraction, 0.0, 1.0);
+    OutDaylight = FMath::SmoothStep(-0.12, 0.05, SunElevation) * Thickness;
+}
+
+void AAstroSpaceEnvironment::ConfigureSkyFor(const UBodyShadingComponent* Shading, double GroundRadiusMeters)
+{
+    // DT_Appearance holds per-megameter coefficients; SkyAtmosphere wants per-kilometer, as color * scale.
+    const FAstroBodyAppearanceRow& A = Shading->GetAppearance();
+    const FVector RayleighPerKm = A.RayleighPerMm * 1e-3;
+    const double RayleighScale = FMath::Max(RayleighPerKm.GetMax(), 1e-9);
+    SkyAtmosphere->SetBottomRadius(static_cast<float>(GroundRadiusMeters / 1000.0));
+    SkyAtmosphere->SetAtmosphereHeight(static_cast<float>(A.AtmosphereHeightKm));
+    SkyAtmosphere->SetRayleighScattering(FLinearColor(RayleighPerKm.X / RayleighScale, RayleighPerKm.Y / RayleighScale, RayleighPerKm.Z / RayleighScale));
+    SkyAtmosphere->SetRayleighScatteringScale(static_cast<float>(RayleighScale));
+    SkyAtmosphere->SetRayleighExponentialDistribution(static_cast<float>(A.RayleighScaleHeightKm));
+    SkyAtmosphere->SetMieScattering(A.MieTint);
+    SkyAtmosphere->SetMieScatteringScale(static_cast<float>(A.MiePerMm * 1e-3));
+    SkyAtmosphere->SetMieAbsorptionScale(static_cast<float>(A.MiePerMm * 1e-3 * 0.11));
+    SkyAtmosphere->SetMieAnisotropy(static_cast<float>(A.MieAnisotropy));
+    SkyAtmosphere->SetMieExponentialDistribution(static_cast<float>(A.MieScaleHeightKm));
+    SkyAtmosphere->SetMultiScatteringFactor(1.0f);
 }

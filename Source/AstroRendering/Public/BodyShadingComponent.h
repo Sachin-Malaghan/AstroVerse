@@ -40,6 +40,13 @@ public:
     // Illuminance from the star at this body this frame (lux).
     double GetSunLux() const { return SunLux; }
 
+    // Atmosphere data for the engine SkyAtmosphere, which takes over near the body.
+    bool HasAtmosphere() const { return AtmosphereTopMeters > 0.0; }
+    double GetAtmosphereTopMeters() const { return AtmosphereTopMeters; }
+    const FAstroBodyAppearanceRow& GetAppearance() const { return Appearance; }
+    // Hides the far-field shell while the engine SkyAtmosphere renders this body.
+    void SetShellVisible(bool bVisible);
+
 private:
     void BuildComponents();
 

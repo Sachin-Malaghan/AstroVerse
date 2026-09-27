@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Math/AstroVector3d.h"
 #include "AstroSpaceEnvironment.generated.h"
 // Scene-wide presentation for space: exposure metered from the real sunlight at the
 // camera (so a sunlit Earth, a dim Neptune and the Sun's glare all sit at believable
@@ -8,6 +9,9 @@
 // Spawned by UAstroRenderingSubsystem. See CLAUDE.md Phase 6.
 
 class UPostProcessComponent;
+class USkyAtmosphereComponent;
+class UBodyShadingComponent;
+class UAstroSimulationSubsystem;
 class UMaterialInstanceDynamic;
 
 UCLASS(NotPlaceable)
@@ -24,6 +28,14 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|Environment")
     TObjectPtr<UPostProcessComponent> PostProcess;
 
+    // Engine sky (multiple scattering, aerial perspective) for the one body whose
+    // atmosphere the camera is in or near; far bodies keep their shell. Phase 7.
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Astro|Environment")
+    TObjectPtr<USkyAtmosphereComponent> SkyAtmosphere;
+
+    // The body SkyAtmosphere is currently rendering, or INDEX_NONE.
+    int32 GetSkyBodyIndex() const { return SkyBodyIndex; }
+
     // Current metered exposure (EV100), after smoothing and compensation.
     UFUNCTION(BlueprintPure, Category = "Astro|Environment")
     double GetExposureEV100() const { return CurrentEV100; }
@@ -35,6 +47,15 @@ public:
 private:
     UPROPERTY(Transient)
     TObjectPtr<UMaterialInstanceDynamic> StarFieldMID;
+
+    // Galactic frame axes in sim (ecliptic) space.
+    FAstroVector3d GalacticX, GalacticY, GalacticZ;
+
+    void UpdateSkyAtmosphere(const UAstroSimulationSubsystem* Sim, const FAstroVector3d& CameraSim, double& OutDaylight);
+    void ConfigureSkyFor(const UBodyShadingComponent* Shading, double GroundRadiusMeters);
+
+    int32 SkyBodyIndex = INDEX_NONE;
+    double SkyGroundMeters = 0.0;
 
     double CurrentEV100 = 15.0;
     double SunLuxAtCamera = 0.0;

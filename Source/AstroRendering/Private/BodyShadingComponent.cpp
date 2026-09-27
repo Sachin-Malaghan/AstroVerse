@@ -188,7 +188,7 @@ void UBodyShadingComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
     const FAstroVector3d ToStar = State.GetBodyState(StarIndex).Position - BodyPos;
     const double Distance = ToStar.Length();
     SunLux = Star.LuminosityWatts / (4.0 * AstroConstants::Pi * Distance * Distance) * Efficacy;
-    const FLinearColor SunDir = ToParam(UAstroSimulationSubsystem::SimToEngineDirection(ToStar / Distance));
+    const FLinearColor SunDir = ToParam(Sim->SimToEngineDirection(ToStar / Distance));
 
     if (SurfaceMID)
     {
@@ -216,5 +216,13 @@ void UBodyShadingComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
     {
         RingMID->SetVectorParameterValue(TEXT("SunDirectionWS"), SunDir);
         RingMID->SetScalarParameterValue(TEXT("SunLux"), SunLux);
+    }
+}
+
+void UBodyShadingComponent::SetShellVisible(bool bVisible)
+{
+    if (AtmosphereShell && AtmosphereShell->IsVisible() != bVisible)
+    {
+        AtmosphereShell->SetVisibility(bVisible);
     }
 }

@@ -69,6 +69,7 @@ void UAstroSimulationSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
     TimeHandle = TimeController->OnSimTimeAdvanced.AddUObject(this, &UAstroSimulationSubsystem::HandleSimTimeAdvanced);
     bReady = true;
+    UpdateRenderFrame();
 
     // Default floating origin: 50,000 km above Earth, if present, so the scene isn't empty.
     const int32 Earth = Registry.FindIndex(TEXT("Earth"));
@@ -100,6 +101,7 @@ void UAstroSimulationSubsystem::HandleSimTimeAdvanced(double SimSeconds, double 
     }
     UpdateStepSize();
     Simulation.AdvanceTo(SimSeconds);
+    UpdateRenderFrame();
     OnSimulationAdvanced.Broadcast(SimSeconds);
 }
 
@@ -185,82 +187,60 @@ AAstroBody* UAstroSimulationSubsystem::GetBodyActor(int32 BodyIndex) const
 
 void UAstroSimulationSubsystem::SetRenderOrigin(const FAstroVector3d& SimPositionMeters)
 {
-    AnchorBodyIndex = INDEX_NONE;
-    RenderOrigin = SimPositionMeters;
+    Origin.SetFixed(SimPositionMeters);
+    UpdateRenderFrame();
 }
 
 void UAstroSimulationSubsystem::SetRenderOriginAnchor(int32 BodyIndex, const FAstroVector3d& OffsetFromBodyMeters)
 {
-    AnchorBodyIndex = BodyIndex;
-    AnchorOffset = OffsetFromBodyMeters;
+    Origin.SetInertial(BodyIndex, OffsetFromBodyMeters);
+    UpdateRenderFrame();
+}
+
+void UAstroSimulationSubsystem::SetRenderOriginBodyFixed(int32 BodyIndex, const FAstroVector3d& OffsetBodyFixedMeters)
+{
+    Origin.SetBodyFixed(BodyIndex, OffsetBodyFixedMeters);
+    UpdateRenderFrame();
+}
+
+void UAstroSimulationSubsystem::ConvertAnchorToBodyFixed(int32 BodyIndex)
+{
+    if (!bReady || !Registry.GetAll().IsValidIndex(BodyIndex))
+    {
+        return;
+    }
+    const FAstroVector3d Offset = Frame.Origin - Simulation.GetBodyState(BodyIndex).Position;
+    const FAstroMatrix3d SimToBody = Registry.Get(BodyIndex).GetOrientationAt(Simulation.GetSimSeconds()).Transposed();
+    SetRenderOriginBodyFixed(BodyIndex, SimToBody * Offset);
 }
 
 void UAstroSimulationSubsystem::ClearRenderOriginAnchor()
 {
-    RenderOrigin = GetRenderOrigin();
-    AnchorBodyIndex = INDEX_NONE;
+    SetRenderOrigin(Frame.Origin);
 }
 
-FAstroVector3d UAstroSimulationSubsystem::GetRenderOrigin() const
+void UAstroSimulationSubsystem::UpdateRenderFrame()
 {
-    if (AnchorBodyIndex != INDEX_NONE && bReady)
-    {
-        return Simulation.GetBodyState(AnchorBodyIndex).Position + AnchorOffset;
-    }
-    return RenderOrigin;
+    Frame = bReady ? Origin.Compute(Registry, Simulation) : FAstroRenderFrame{ Origin.FixedOrigin, FAstroMatrix3d() };
 }
 
 void UAstroSimulationSubsystem::ShiftRenderOrigin(const FVector& EngineOffsetCm)
 {
-    const FAstroVector3d Delta = EngineToSimDirection(EngineOffsetCm) / AstroConstants::UnrealUnitsPerMeter;
-    if (AnchorBodyIndex != INDEX_NONE)
+    if (bReady)
     {
-        AnchorOffset += Delta;
+        Origin.Shift(Frame.ToSimDirection(EngineOffsetCm) / AstroConstants::UnrealUnitsPerMeter, Registry, Simulation);
     }
-    else
-    {
-        RenderOrigin += Delta;
-    }
-}
-
-FVector UAstroSimulationSubsystem::SimToEngineDirection(const FAstroVector3d& V)
-{
-    // Ecliptic is right-handed (Z = ecliptic north); the engine is left-handed Z-up: flip Y.
-    return FVector(V.X, -V.Y, V.Z);
-}
-
-FAstroVector3d UAstroSimulationSubsystem::EngineToSimDirection(const FVector& V)
-{
-    return FAstroVector3d(V.X, -V.Y, V.Z);
-}
-
-FVector UAstroSimulationSubsystem::SimToEnginePosition(const FAstroVector3d& SimPositionMeters) const
-{
-    return SimToEngineDirection((SimPositionMeters - GetRenderOrigin()) * AstroConstants::UnrealUnitsPerMeter);
-}
-
-FAstroVector3d UAstroSimulationSubsystem::EngineToSimPosition(const FVector& EngineLocationCm) const
-{
-    return GetRenderOrigin() + EngineToSimDirection(EngineLocationCm) / AstroConstants::UnrealUnitsPerMeter;
-}
-
-FQuat UAstroSimulationSubsystem::SimToEngineRotation(const FAstroMatrix3d& BodyToEcliptic)
-{
-    // Conjugate by the Y-flip so the result is a proper rotation in engine space.
-    const FVector X = SimToEngineDirection(BodyToEcliptic.GetColumn(0));
-    const FVector Y = -SimToEngineDirection(BodyToEcliptic.GetColumn(1));
-    const FVector Z = SimToEngineDirection(BodyToEcliptic.GetColumn(2));
-    return FMatrix(FPlane(X, 0.0), FPlane(Y, 0.0), FPlane(Z, 0.0), FPlane(0.0, 0.0, 0.0, 1.0)).ToQuat();
+    UpdateRenderFrame();
 }
 
 FVector UAstroSimulationSubsystem::SimToScaledEnginePosition(const FAstroVector3d& SimPositionMeters, double* OutScaleFactor) const
 {
-    const FScaledSpacePlacement Placement = ScaledSpace::Place(SimPositionMeters - GetRenderOrigin(), LinearRenderLimitMeters);
+    const FScaledSpacePlacement Placement = ScaledSpace::Place(SimPositionMeters - Frame.Origin, LinearRenderLimitMeters);
     if (OutScaleFactor)
     {
         *OutScaleFactor = Placement.ScaleFactor;
     }
-    return SimToEngineDirection(Placement.RenderOffsetMeters * AstroConstants::UnrealUnitsPerMeter);
+    return Frame.ToEngineDirection(Placement.RenderOffsetMeters * AstroConstants::UnrealUnitsPerMeter);
 }
 
 bool UAstroSimulationSubsystem::GetBodyRenderTransform(int32 BodyIndex, FVector& OutLocationCm, FQuat& OutRotation, double& OutScaleFactor) const

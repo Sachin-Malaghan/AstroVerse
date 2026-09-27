@@ -124,7 +124,8 @@ void UAstroRenderingSubsystem::ApplyRenderBudget()
         Value.TrimStartAndEndInline();
         if (IConsoleVariable* CVar = IConsoleManager::Get().FindConsoleVariable(*Name))
         {
-            CVar->Set(*Value, ECVF_SetByGameSetting);
+            // Code priority: project-setting defaults would otherwise win over the budget.
+            CVar->Set(*Value, ECVF_SetByCode);
         }
         else
         {

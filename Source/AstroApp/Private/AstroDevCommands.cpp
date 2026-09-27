@@ -104,7 +104,20 @@ namespace
             Sim->SetRenderOriginAnchor(Body, Dir * Distance);
             Camera->SetActorLocation(FVector::ZeroVector);
             // Aim along the true direction (direction is preserved by scaled space).
-            Camera->SetActorRotation(UAstroSimulationSubsystem::SimToEngineDirection(-Dir).Rotation());
+            Camera->SetActorRotation(Sim->SimToEngineDirection(-Dir).Rotation());
+        }));
+
+    // Engine axes in a landed frame: +X east, -Y north, +Z up. Yaw 0 = east, -90 = north.
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdCameraLook(
+        TEXT("astro.Camera.Look"), TEXT("astro.Camera.Look <yaw_deg> <pitch_deg> - aim the view camera in engine axes"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            ACameraActor* Camera = ViewCamera(World);
+            if (Camera && Args.Num() >= 2)
+            {
+                Camera->SetActorLocation(FVector::ZeroVector);
+                Camera->SetActorRotation(FRotator(FCString::Atod(*Args[1]), FCString::Atod(*Args[0]), 0.0));
+            }
         }));
 
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdCameraLookDown(

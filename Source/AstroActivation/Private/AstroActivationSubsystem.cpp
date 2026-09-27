@@ -80,7 +80,7 @@ void UAstroActivationSubsystem::GatherViews(TArray<FActivationBodyView>& OutView
         const double AngularRadius = Distance > Radius ? FMath::Asin(Radius / Distance) : UE_HALF_PI;
 
         // Direction is preserved by scaled space, so test it in engine axes.
-        const FVector Dir = UAstroSimulationSubsystem::SimToEngineDirection(ToBody.Normalized());
+        const FVector Dir = Sim->SimToEngineDirection(ToBody.Normalized());
         const double Forward = FVector::DotProduct(Dir, CameraAxes.GetScaledAxis(EAxis::X));
         const double Right = FVector::DotProduct(Dir, CameraAxes.GetScaledAxis(EAxis::Y));
         const double Up = FVector::DotProduct(Dir, CameraAxes.GetScaledAxis(EAxis::Z));
