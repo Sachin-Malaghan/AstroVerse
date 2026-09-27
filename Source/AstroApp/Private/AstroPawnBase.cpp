@@ -4,6 +4,7 @@
 #include "AstroInputActions.h"
 #include "AstroPlayerController.h"
 #include "AstroSimulationSubsystem.h"
+#include "AstroTravelSubsystem.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
 #include "Math/AstroConstants.h"
@@ -79,6 +80,19 @@ void AAstroPawnBase::Tick(float DeltaSeconds)
         const FAstroVector3d Target = Sim->GetSimulation().GetBodyState(Sim->GetRenderOriginAnchorBody()).Position;
         SetActorRotation(Sim->SimToEngineDirection((Target - Sim->GetRenderOrigin()).Normalized()).Rotation());
         bFacedInitialBody = true;
+    }
+
+    // In transit the travel system flies the view; piloted ships take throttle and steering from us.
+    if (UAstroTravelSubsystem* Travel = UAstroTravelSubsystem::Get(this); Travel && Travel->IsTravelling())
+    {
+        const FVector2D Look = Input.ConsumeLook();
+        if (Travel->GetActiveStyle() == EAstroTravelStyle::PilotedShip)
+        {
+            Travel->SetPilotInput(static_cast<float>(Input.MoveAxis.X), FVector2D(Look.X + Input.MoveAxis.Y * 4.0, Look.Y));
+        }
+        Velocity = FVector::ZeroVector;
+        Locomotion = EAstroLocomotion::Flying;
+        return;
     }
 
     UpdateReferenceFrame(Sim);

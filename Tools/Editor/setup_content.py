@@ -459,6 +459,68 @@ def build_star_field():
     return m
 
 
+def build_warp_materials():
+    """Travel effects (Phase 9): warp streak post-process, tunnel, placeholder ship hull."""
+    # Radial blur toward the view center from plain SceneTexture taps (no custom lookup):
+    # sum over i of Scene(uv - (uv - 0.5) * t_i), t_i = i / (N - 1) * Intensity * 0.18.
+    m = fresh_material("M_WarpPost")
+    m.set_editor_property("material_domain", unreal.MaterialDomain.MD_POST_PROCESS)
+    location = getattr(unreal.BlendableLocation, "BL_SCENE_COLOR_BEFORE_BLOOM", None)         or getattr(unreal.BlendableLocation, "BL_BEFORE_BLOOM", None)
+    if location is not None:
+        m.set_editor_property("blendable_location", location)
+    g = Graph(m)
+    intensity = g.scalar("Intensity", 0.0)
+    uv = g.mask(g.node(unreal.MaterialExpressionScreenPosition), True, True, False, False)
+    from_center = g.node(unreal.MaterialExpressionSubtract, x=-1000)
+    MEL.connect_material_expressions(uv, "", from_center, "A")
+    from_center.set_editor_property("const_b", 0.5)
+    taps = 10
+    total = None
+    for i in range(taps):
+        t = g.binary(unreal.MaterialExpressionMultiply, intensity, const_b=0.18 * i / (taps - 1))
+        offset = g.binary(unreal.MaterialExpressionMultiply, from_center, t)
+        tap_uv = g.binary(unreal.MaterialExpressionSubtract, uv, offset)
+        tap = g.node(unreal.MaterialExpressionSceneTexture, x=-500, scene_texture_id=unreal.SceneTextureId.PPI_POST_PROCESS_INPUT0)
+        MEL.connect_material_expressions(tap_uv, "", tap, "UVs")
+        rgb = g.node(unreal.MaterialExpressionComponentMask, x=-350, r=True, g=True, b=True, a=False)
+        MEL.connect_material_expressions(tap, "Color", rgb, "")
+        total = rgb if total is None else g.binary(unreal.MaterialExpressionAdd, total, rgb)
+    average = g.binary(unreal.MaterialExpressionMultiply, total, const_b=1.0 / taps)
+    # A slight blue shift as the warp builds.
+    tint = g.node(unreal.MaterialExpressionLinearInterpolate, x=-200)
+    MEL.connect_material_expressions(g.vector("Neutral", (1, 1, 1, 1)), "", tint, "A")
+    MEL.connect_material_expressions(g.vector("WarpTint", (0.8, 0.9, 1.25, 1)), "", tint, "B")
+    MEL.connect_material_expressions(g.binary(unreal.MaterialExpressionMultiply, intensity, const_b=0.35), "", tint, "Alpha")
+    MEL.connect_material_property(g.binary(unreal.MaterialExpressionMultiply, average, tint), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+    m = fresh_material("M_WarpTunnel")
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    m.set_editor_property("two_sided", True)
+    g = Graph(m)
+    inputs = {
+        "UV": g.node(unreal.MaterialExpressionTextureCoordinate, coordinate_index=0),
+        "Time": g.node(unreal.MaterialExpressionTime),
+        "Intensity": g.scalar("Intensity", 0.0),
+    }
+    c = g.custom("WarpTunnel.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    g.wire(c, inputs)
+    # Display-referred: undo the current exposure so the streaks read the same everywhere.
+    exposure = g.node(unreal.MaterialExpressionEyeAdaptationInverse)
+    lit = g.binary(unreal.MaterialExpressionMultiply, c, exposure)
+    MEL.connect_material_property(lit, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+    m = fresh_material("M_ShipHull")
+    g = Graph(m)
+    MEL.connect_material_property(g.vector("Color", (0.06, 0.065, 0.075, 1)), "", unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(g.scalar("Metallic", 0.8), "", unreal.MaterialProperty.MP_METALLIC)
+    MEL.connect_material_property(g.scalar("Roughness", 0.35), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    finish(m)
+    log("Built warp materials")
+
+
 # ----------------------------------------------------------------------------- instances
 
 def instance(name, parent, scalars=None, vectors=None, textures=None):
@@ -540,6 +602,7 @@ rings = build_rings()
 sun = build_sun_surface()
 corona = build_corona()
 star_field = build_star_field()
+build_warp_materials()
 build_instances(surface, sun, rings, star_field)
 build_level()
 log("Done")

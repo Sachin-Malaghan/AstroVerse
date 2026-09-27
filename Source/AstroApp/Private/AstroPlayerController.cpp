@@ -4,6 +4,7 @@
 #include "AstroInputActions.h"
 #include "AstroScaleDomainSubsystem.h"
 #include "AstroSimulationSubsystem.h"
+#include "AstroTravelSubsystem.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/Engine.h"
 #include "Engine/LocalPlayer.h"
@@ -158,4 +159,23 @@ void AAstroPlayerController::OnToggleGalaxy(const FInputActionValue& Value)
 
 void AAstroPlayerController::OnToggleHUDAction(const FInputActionValue& Value) { OnToggleHUD.Broadcast(); }
 void AAstroPlayerController::OnMenuAction(const FInputActionValue& Value) { OnMenu.Broadcast(); }
-void AAstroPlayerController::OnTravelAction(const FInputActionValue& Value) { OnTravelRequested.Broadcast(); }
+void AAstroPlayerController::OnTravelAction(const FInputActionValue& Value)
+{
+    // Travel to the selected body (or the one under the reticle); pressing again mid-transit skips ahead.
+    UAstroTravelSubsystem* Travel = UAstroTravelSubsystem::Get(this);
+    if (!Travel)
+    {
+        return;
+    }
+    if (Travel->IsTravelling())
+    {
+        Travel->FinishNow();
+        return;
+    }
+    const FName Target = SelectedBody.IsNone() ? FindBodyUnderReticle() : SelectedBody;
+    if (!Target.IsNone())
+    {
+        Travel->BeginTravel(Target);
+    }
+    OnTravelRequested.Broadcast();
+}

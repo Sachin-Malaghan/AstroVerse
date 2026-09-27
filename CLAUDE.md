@@ -96,7 +96,7 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - [x] **Phase 6 — AstroRendering.** Corona/flare, atmospheric scattering, ring shaders; split Lumen/Nanite budgets per platform (desktop full, VR trimmed for 90Hz).
 - [x] **Phase 7 — Scale and precision infrastructure.** Confirm floating-origin behavior at true scale; build the Solar-System ↔ Galaxy scale-domain transition.
 - [x] **Phase 8 — AstroInput + AstroApp pawns.** Desktop flycam pawn first, then VR pawn with room-scale/teleport locomotion.
-- [ ] **Phase 9 — AstroTravel.** Cinematic warp and player-piloted ship, user-selectable; clock-during-transit is a user setting. See "Decided — travel" below.
+- [x] **Phase 9 — AstroTravel.** Cinematic warp and player-piloted ship, user-selectable; clock-during-transit is a user setting. See "Decided — travel" below.
 - [ ] **Phase 10 — AstroGalaxy.** Milky Way disc representation, Sun position/velocity marker, scale-domain transition polish.
 - [ ] **Phase 11 — AstroUI.** God-mode time HUD, teaching-mode facts panels, VR world-space diegetic panels.
 - [ ] **Phase 12 — Platform polish.** VR performance budget pass; groundwork for the later mobile port.
