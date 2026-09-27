@@ -12,7 +12,6 @@
 
 class UAstroSimulationSubsystem;
 class UStaticMeshComponent;
-class UMaterialInstanceDynamic;
 struct FBodyDefinition;
 
 UCLASS(Abstract)
@@ -75,9 +74,4 @@ private:
     TArray<FAstroVector3d> TrailPoints;
     double LastTrailSampleTime = 0.0;
 
-    // Per-body shading input: the true direction to the star from this body, which a
-    // single scene light cannot provide once bodies are far from the camera.
-    void UpdateSunDirection();
-    UPROPERTY(Transient)
-    TObjectPtr<UMaterialInstanceDynamic> SurfaceMaterial;
 };

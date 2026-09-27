@@ -1,13 +1,10 @@
 // See CLAUDE.md Phase 2.
 #include "AstroBody.h"
-#include "AstroBodiesSettings.h"
 #include "AstroSimulationSubsystem.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
 #include "HAL/IConsoleManager.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
 
 // Validation aids for Phase 4. They change only what is drawn, never the physics.
@@ -57,14 +54,6 @@ void AAstroBody::BindToSimulation(UAstroSimulationSubsystem* InSimulation, int32
         MassKg = Definition->MassKg;
         RadiusMeters = Definition->GetMeanRadiusMeters();
         BodyType = Definition->BodyType;
-
-        const UAstroBodiesSettings* Settings = GetDefault<UAstroBodiesSettings>();
-        const TSoftObjectPtr<UMaterialInterface>& Material = BodyType == EAstroBodyType::Star ? Settings->StarMaterial : Settings->PlanetMaterial;
-        if (UMaterialInterface* Loaded = Material.LoadSynchronous())
-        {
-            BodyMesh->SetMaterial(0, Loaded);
-        }
-        SurfaceMaterial = BodyType == EAstroBodyType::Star ? nullptr : BodyMesh->CreateAndSetMaterialInstanceDynamic(0);
         OnBoundToDefinition(*Definition);
     }
 }
@@ -98,7 +87,6 @@ void AAstroBody::Tick(float DeltaSeconds)
     SetActorScale3D(FVector(Definition->EquatorialRadiusMeters, Definition->EquatorialRadiusMeters, Definition->PolarRadiusMeters) * Scale);
     OnRenderTransformUpdated(RenderScaleFactor);
 
-    UpdateSunDirection();
     UpdateDebugTrail();
 }
 
@@ -139,19 +127,6 @@ void AAstroBody::UpdateDebugTrail()
         Previous = Next;
     }
     DrawDebugLine(GetWorld(), Previous, GetActorLocation(), Color, false, 0.0f, SDPG_Foreground, 0.0f);
-}
-
-void AAstroBody::UpdateSunDirection()
-{
-    const UAstroSimulationSubsystem* Sim = Simulation.Get();
-    if (!SurfaceMaterial || !Sim)
-    {
-        return;
-    }
-    const int32 Star = Sim->GetRegistry().GetStarIndex();
-    const FAstroVector3d ToStar = Sim->GetSimulation().GetBodyState(Star).Position - Sim->GetSimulation().GetBodyState(BodyIndex).Position;
-    const FVector Direction = UAstroSimulationSubsystem::SimToEngineDirection(ToStar.Normalized());
-    SurfaceMaterial->SetVectorParameterValue(TEXT("SunDirection"), FLinearColor(Direction.X, Direction.Y, Direction.Z, 0.0f));
 }
 
 void AAstroBody::SetHighDetail(bool bInHighDetail)

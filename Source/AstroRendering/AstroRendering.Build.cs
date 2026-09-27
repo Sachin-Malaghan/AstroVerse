@@ -10,9 +10,12 @@ public class AstroRendering : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
+            "DeveloperSettings",
+            "HeadMountedDisplay",
             "RenderCore",
             "RHI",
             "Niagara",
+            "AstroCore",
             "AstroBodies",
             "AstroActivation"
         });

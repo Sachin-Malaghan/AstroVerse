@@ -92,7 +92,7 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - [x] **Phase 3 — AstroTime.** Implement `UTimeController` play/pause/rewind/timescale; confirm every Phase 1-2 class reads time from here, not `GetWorld()`.
 - [x] **Phase 4 — Minimal proof-of-motion scene.** Placeholder spheres orbiting correctly in `L_SolarSystem`, no art pass yet — this validates the physics visually before any rendering investment.
 - [x] **Phase 5 — AstroActivation.** Implement `FActivationManager` tier promotion/demotion, the 3-lock cap with demotion-of-oldest, reference-frame handling.
-- [ ] **Phase 6 — AstroRendering.** Corona/flare, atmospheric scattering, ring shaders; split Lumen/Nanite budgets per platform (desktop full, VR trimmed for 90Hz).
+- [x] **Phase 6 — AstroRendering.** Corona/flare, atmospheric scattering, ring shaders; split Lumen/Nanite budgets per platform (desktop full, VR trimmed for 90Hz).
 - [ ] **Phase 7 — Scale and precision infrastructure.** Confirm floating-origin behavior at true scale; build the Solar-System ↔ Galaxy scale-domain transition.
 - [ ] **Phase 8 — AstroInput + AstroApp pawns.** Desktop flycam pawn first, then VR pawn with room-scale/teleport locomotion.
 - [ ] **Phase 9 — AstroTravel.** Cinematic warp and player-piloted ship, user-selectable; clock-during-transit is a user setting. See "Decided — travel" below.
@@ -112,6 +112,13 @@ Do not start a phase until the previous one compiles and the relevant module's c
 - **Scaled-space rendering for far bodies.** Beyond a render-distance threshold, a body is drawn at a monotonically compressed distance and scaled down by exactly the same factor, so its angular size and draw order stay physically correct. This is a rendering technique (as in KSP), not artistic distance compression — simulation positions are always true scale.
 - **Moon coverage v1:** curated set — Earth's Moon, Phobos, Deimos, Io, Europa, Ganymede, Callisto, Titan. Adding more is a data change.
 - **Sim time** is seconds since J2000.0 (TDB, treated as uniform). Positions are meters in the J2000 ecliptic frame, origin at the solar-system barycenter.
+
+## Rendering notes (Phase 6)
+
+- Bodies are shaded by custom HLSL (Tools/Editor/shaders/*.hlsl, inlined into materials by setup_content.py) from a per-body sun direction and illuminance computed from the simulation — never from the scene light, which is only valid near the camera in scaled space. The star's directional light is kept, at the physically right lux, for lit meshes near the camera (terrain, craft).
+- Exposure is an incident-light meter on the real sunlight at the camera (EV100 = log2(E/2.5)); `astro.Render.ExposureCompensation` offsets it. Stars are held at a constant display brightness (StarDisplayBrightness) — a cinematic choice, flagged in settings.
+- Planet textures: Solar System Scope, CC BY 4.0 — the credits screen must show "Planet textures by Solar System Scope (solarsystemscope.com), CC BY 4.0" (see SourceArt/Textures/SolarSystemScope/ATTRIBUTION.md).
+- Galilean moons, Titan, Phobos, Deimos are procedural until maps are sourced.
 
 ## Open items not yet scoped
 

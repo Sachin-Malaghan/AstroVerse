@@ -6,7 +6,6 @@
 
 class UDataTable;
 class AAstroBody;
-class UMaterialInterface;
 
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Astro Bodies"))
 class ASTROBODIES_API UAstroBodiesSettings : public UDeveloperSettings
@@ -49,13 +48,6 @@ public:
 
     UPROPERTY(Config, EditAnywhere, Category = "Spawning")
     bool bSpawnBodiesOnBeginPlay = true;
-
-    // Placeholder surface materials until the Phase 6 art pass. Unset = engine default.
-    UPROPERTY(Config, EditAnywhere, Category = "Spawning")
-    TSoftObjectPtr<UMaterialInterface> StarMaterial;
-
-    UPROPERTY(Config, EditAnywhere, Category = "Spawning")
-    TSoftObjectPtr<UMaterialInterface> PlanetMaterial;
 
     // Override per type with Blueprint subclasses once art exists.
     UPROPERTY(Config, EditAnywhere, Category = "Spawning")
