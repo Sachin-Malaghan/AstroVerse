@@ -23,6 +23,7 @@ AStar::AStar()
     // the terminator) is lit through different air paths. Without this, terrain viewed from
     // above the atmosphere was lit as if at sunset.
     SunLight->bPerPixelAtmosphereTransmittance = true;
+    SunLight->ForwardShadingPriority = 1; // stays the main directional light (a mission adds earthshine)
 }
 
 void AStar::OnRenderTransformUpdated(double ScaleFactor)

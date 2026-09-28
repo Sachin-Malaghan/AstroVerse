@@ -553,6 +553,29 @@ def build_mission_materials():
     g.wire(c, inputs)
     MEL.connect_material_property(c, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     finish(m)
+
+    # Station window panes: unlit, lit from inside (the actor sets Glow from the exposure).
+    m = fresh_material("M_StationLight")
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    g = Graph(m)
+    MEL.connect_material_property(g.vector("Glow", (1.0, 0.78, 0.5, 1)), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+
+    # Navigation lights / strobes: additive halo on a sphere.
+    m = fresh_material("M_StationGlow")
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    g = Graph(m)
+    inputs = {
+        "N": g.node(unreal.MaterialExpressionVertexNormalWS),
+        "V": g.node(unreal.MaterialExpressionCameraVectorWS),
+        "Glow": g.vector("Glow", (8.0, 1.0, 1.0, 1)),
+    }
+    c = g.custom("Glow.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    g.wire(c, inputs)
+    MEL.connect_material_property(c, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
     log("Built mission materials")
 
 

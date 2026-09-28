@@ -3,6 +3,8 @@
 #include "AstroGeodesy.h"
 #include "AstroMissionActors.h"
 #include "AstroVehicleData.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/DirectionalLightComponent.h"
 #include "AstroSimulationSubsystem.h"
 #include "AstroTravelSubsystem.h"
 #include "BodyTerrain.h"
@@ -481,6 +483,8 @@ void UAstroMissionSubsystem::Abort()
 {
     if (Rocket.IsValid()) { Rocket->Destroy(); }
     if (Ship.IsValid()) { Ship->Destroy(); }
+    if (Earthshine.IsValid()) { Earthshine->Destroy(); }
+    Earthshine.Reset();
     Rocket.Reset();
     Ship.Reset();
     if (UAstroTravelSubsystem* Travel = UAstroTravelSubsystem::Get(this))
@@ -576,6 +580,51 @@ void UAstroMissionSubsystem::PlaceCamera(UAstroSimulationSubsystem* Sim, const F
         const FVector Dir = Sim->SimToEngineDirection(BodyFixedDirToSim(Sim, (LookBF - CamBF).Normalized())).GetSafeNormal();
         View->SetActorRotation(FRotationMatrix::MakeFromXZ(Dir, FVector::UpVector).ToQuat());
     }
+}
+
+void UAstroMissionSubsystem::UpdateEarthshine(const UAstroSimulationSubsystem* Sim, const FAstroVector3d& UpBF, double Altitude, bool bOn)
+{
+    if (!Earthshine.IsValid())
+    {
+        if (!bOn)
+        {
+            return;
+        }
+        FActorSpawnParameters Params;
+        Params.Name = MakeUniqueObjectName(GetWorld()->GetCurrentLevel(), ADirectionalLight::StaticClass(), TEXT("AstroEarthshine"));
+        Earthshine = GetWorld()->SpawnActor<ADirectionalLight>(Params);
+        if (!Earthshine.IsValid())
+        {
+            return;
+        }
+        Earthshine->SetMobility(EComponentMobility::Movable);
+        UDirectionalLightComponent* L = Earthshine->GetComponent();
+        L->SetAtmosphereSunLight(false);
+        L->SetCastShadows(false);
+        L->SetForwardShadingPriority(0); // below the Sun (priority 1)
+        L->SetLightColor(FLinearColor(0.72f, 0.82f, 1.0f));
+        L->bAffectsWorld = true;
+    }
+    UDirectionalLightComponent* L = Earthshine->GetComponent();
+    if (!bOn)
+    {
+        L->SetIntensity(0.0f);
+        return;
+    }
+    // Sun illuminance at Earth, the sunlit fraction of the disc below, albedo 0.3, and the part
+    // of the sky the Earth fills from this altitude (the ground itself is lit by the sky light).
+    const int32 StarIndex = Sim->GetRegistry().GetStarIndex();
+    const FBodyDefinition& Star = Sim->GetRegistry().Get(StarIndex);
+    const FAstroVector3d ToSun = Sim->GetSimulation().GetBodyState(StarIndex).Position - Sim->GetSimulation().GetBodyState(Earth).Position;
+    const double Lux = Star.LuminosityWatts / (4.0 * AstroConstants::Pi * ToSun.Dot(ToSun)) * 93.0;
+    const FBodyDefinition& Def = Sim->GetRegistry().Get(Earth);
+    const FAstroVector3d SunBF = Def.GetOrientationAt(Sim->GetSimulation().GetSimSeconds()).Transposed() * ToSun.Normalized();
+    const double Lit = FMath::Clamp(0.5 + 0.5 * SunBF.Dot(UpBF), 0.0, 1.0);
+    const double View = FMath::SmoothStep(2000.0, 60000.0, Altitude) * 0.85;
+    L->SetIntensity(static_cast<float>(Lux * 0.3 * Lit * View));
+    // The light travels up from the Earth (engine-space direction of the local vertical).
+    const FVector Dir = Sim->SimToEngineDirection(BodyFixedDirToSim(Sim, UpBF)).GetSafeNormal();
+    Earthshine->SetActorRotation(Dir.Rotation());
 }
 
 double UAstroMissionSubsystem::ExposureWhite(const UAstroSimulationSubsystem* Sim) const
@@ -706,6 +755,7 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
         }
         break;
     case EAstroMissionPhase::Departure:
+        UpdateEarthshine(Sim, FAstroVector3d(0, 0, 1), 0.0, false);
         Status.PhaseText = FString::Printf(TEXT("%s en route to %s"), ShipName, *Destination.ToString());
         return; // the travel system flies; the ship rides along (OnPathApplied)
     case EAstroMissionPhase::Parked:
@@ -836,13 +886,16 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
         Cam = RocketMid - Axis * (70.0 * K) + Side * (28.0 * K) + LocalUp * (14.0 * K);
         Look = ShipCentre;
     }
-    else // Docked: a slow orbit around the joined vehicles
+    else // Docked: close on the port, then pulling back to show the whole station
     {
-        const double A = PhaseSeconds * 0.35;
-        Cam = ShipCentre + (Side * FMath::Cos(A) + LocalUp * 0.35 + Axis * FMath::Sin(A) * 0.6) * (150.0 * K);
-        Look = ShipCentre - Axis * 20.0;
+        const double Pull = FMath::SmoothStep(2.0, 16.0, PhaseSeconds);
+        const double A = PhaseSeconds * 0.12;
+        const FAstroVector3d Port = ShipCentre - Axis * AstroRingShipDockOffset();
+        Look = Port + (ShipCentre - Port) * Pull;
+        Cam = Look + (Side * FMath::Cos(A) + LocalUp * 0.4 + Axis * (FMath::Sin(A) * 0.6 - 0.3)) * FMath::Lerp(150.0 * K, 820.0, Pull);
     }
     PlaceCamera(Sim, Cam, Look);
+    UpdateEarthshine(Sim, LocalUp, Altitude, true);
     Rocket->SetPadTransform(ToEngine(Sim, SiteUp * GroundRadius), EngineRotation(Sim, SiteUp, SiteNorth, true));
     Rocket->SetPadVisible(Altitude < 60000.0);
     Rocket->SetRocketTransform(ToEngine(Sim, CapsuleBase), RocketRot * Turn);
@@ -954,7 +1007,8 @@ void UAstroMissionSubsystem::UpdateShipRidingAlong()
         return;
     }
     const FQuat Q = View->GetActorQuat();
-    const FVector Pos = View->GetActorLocation() + Q.RotateVector(FVector(190.0, 0.0, -20.0) * 100.0);
+    // Far enough ahead that the whole ring station (340 m across) sits in the view.
+    const FVector Pos = View->GetActorLocation() + Q.RotateVector(FVector(1100.0, 0.0, -170.0) * 100.0);
     Ship->SetActorHiddenInGame(false);
     Ship->SetShipTransform(Pos, Q);
     const UAstroTravelSubsystem* Travel = UAstroTravelSubsystem::Get(this);

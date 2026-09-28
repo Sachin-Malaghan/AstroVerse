@@ -97,24 +97,44 @@ public:
     virtual void BeginPlay() override;
     virtual void Tick(float DeltaSeconds) override;
 
-    // Actor origin = ship centre; +X = forward (the docking port is at the front, engines aft).
-    static constexpr double Length = 64.0;
-    static constexpr double RingRadius = 30.0;
-    static constexpr double DockingPortX = 34.0;
+    // The ring station-ship Odyssey (Tools/Editor/build_station.py). Actor origin = the ring's
+    // centre; +X = forward (docking node and front port), engines aft. Metres.
+    static constexpr double Length = 420.0;
+    static constexpr double RingRadius = 170.0;     // outer hull
+    static constexpr double DockingPortX = 146.0;   // front docking port face
 
     void SetShipTransform(const FVector& Centre, const FQuat& Rotation);
+    // Main engines (0..1) and the current exposure white point, which also drives the window,
+    // navigation-light and strobe brightness.
     void SetEngines(float Power, double ExposureWhite);
-    // The ring spins about the ship's axis for artificial gravity (rpm).
+    // The habitat ring spins about the ship's axis for artificial gravity (rpm; 2.36 = 1 g at 160 m).
     void SetRingRpm(float Rpm) { RingRpm = Rpm; }
 
 private:
-    UStaticMeshComponent* Part(USceneComponent* Parent, const TCHAR* Name, UStaticMesh* Mesh, const FVector& CentreM, const FVector& SizeM, const FLinearColor& Colour, const FRotator& Rotation = FRotator::ZeroRotator);
+    struct FNavLight
+    {
+        TObjectPtr<UStaticMeshComponent> Halo;
+        TObjectPtr<UMaterialInstanceDynamic> MID;
+        FLinearColor Colour;
+        float Brightness = 1.0f;   // x exposure white
+        uint8 Pattern = 0;         // 0 steady, 1 strobe (double flash), 2 slow blink
+        float Phase = 0.0f;
+    };
+    UStaticMeshComponent* MeshPart(USceneComponent* Parent, const TCHAR* Name, const TCHAR* Path);
+    void AddNavLight(USceneComponent* Parent, const TCHAR* Name, const FVector& PosM, float SizeM, const FLinearColor& Colour, float Brightness, uint8 Pattern, float Phase);
+    void AddFlood(const TCHAR* Name, const FVector& PosM, const FRotator& Aim);
 
     UPROPERTY() TObjectPtr<USceneComponent> Root;
     UPROPERTY() TObjectPtr<USceneComponent> RingRoot;
+    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> WindowMeshes;
+    UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> WindowMIDs;
     UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> EnginePlumes;
     UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> PlumeMIDs;
-    TArray<TPair<TObjectPtr<UStaticMeshComponent>, FLinearColor>> PendingColours;
-    float RingRpm = 4.0f;
+    UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> NavHalos;
+    UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> NavMIDs;
+    TArray<FNavLight> NavLights;
+    float RingRpm = 2.36f;
     float RingAngle = 0.0f;
+    float Clock = 0.0f;
+    double White = 1.0;
 };

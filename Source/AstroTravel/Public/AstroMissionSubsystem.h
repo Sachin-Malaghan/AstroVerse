@@ -107,6 +107,10 @@ private:
 
     TWeakObjectPtr<AAstroRocketActor> Rocket;
     TWeakObjectPtr<AAstroRingShipActor> Ship;
+    // Earthshine: sunlight reflected by the Earth below (albedo 0.3), lighting the vehicles'
+    // Earth-facing sides in low orbit. Only affects lit meshes (bodies use their own shading).
+    TWeakObjectPtr<class ADirectionalLight> Earthshine;
+    void UpdateEarthshine(const UAstroSimulationSubsystem* Sim, const FAstroVector3d& UpBF, double Altitude, bool bOn);
     FAstroMissionStatus Status;
     FName Destination;
     int32 Earth = INDEX_NONE;

@@ -2,6 +2,7 @@
 #include "AstroMissionActors.h"
 #include "AstroVehicleData.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SpotLightComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
@@ -375,6 +376,57 @@ void AAstroRocketActor::SetUpperVisible(bool bVisible)
 
 // ---------------------------------------------------------------------------- ring ship
 
+namespace
+{
+    const TCHAR* StationLightPath = TEXT("/Game/Rendering/Materials/M_StationLight.M_StationLight");
+    const TCHAR* StationGlowPath = TEXT("/Game/Rendering/Materials/M_StationGlow.M_StationGlow");
+}
+
+UStaticMeshComponent* AAstroRingShipActor::MeshPart(USceneComponent* Parent, const TCHAR* Name, const TCHAR* Path)
+{
+    UStaticMeshComponent* C = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+    C->SetupAttachment(Parent);
+    ConstructorHelpers::FObjectFinder<UStaticMesh> Mesh(Path);
+    if (Mesh.Succeeded())
+    {
+        C->SetStaticMesh(Mesh.Object);
+    }
+    C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    C->SetCastShadow(true);
+    C->bNeverDistanceCull = true;
+    return C;
+}
+
+void AAstroRingShipActor::AddNavLight(USceneComponent* Parent, const TCHAR* Name, const FVector& PosM, float SizeM, const FLinearColor& Colour, float Brightness, uint8 Pattern, float Phase)
+{
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+    UStaticMeshComponent* C = MakePart(this, Parent, Name, Sphere.Object, PosM, FVector(SizeM), FRotator::ZeroRotator);
+    C->SetCastShadow(false);
+    NavHalos.Add(C);
+    FNavLight L;
+    L.Halo = C;
+    L.Colour = Colour;
+    L.Brightness = Brightness;
+    L.Pattern = Pattern;
+    L.Phase = Phase;
+    NavLights.Add(L);
+}
+
+void AAstroRingShipActor::AddFlood(const TCHAR* Name, const FVector& PosM, const FRotator& Aim)
+{
+    // Floodlights on the hull: invisible against sunlight, they light the ship in Earth's shadow.
+    USpotLightComponent* S = CreateDefaultSubobject<USpotLightComponent>(Name);
+    S->SetupAttachment(Root);
+    S->SetRelativeLocationAndRotation(PosM * 100.0, Aim);
+    S->SetIntensityUnits(ELightUnits::Candelas);
+    S->SetIntensity(60000.0f);
+    S->SetAttenuationRadius(40000.0f);
+    S->SetInnerConeAngle(18.0f);
+    S->SetOuterConeAngle(34.0f);
+    S->SetLightColor(FLinearColor(1.0f, 0.93f, 0.82f));
+    S->SetCastShadows(false);
+}
+
 AAstroRingShipActor::AAstroRingShipActor()
 {
     PrimaryActorTick.bCanEverTick = true;
@@ -382,71 +434,129 @@ AAstroRingShipActor::AAstroRingShipActor()
     Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
     RootComponent = Root;
     const FShapes S = LoadShapes();
-    const FRotator AlongX(90, 0, 0); // basic cylinders are along Z; lay them along the ship's X
 
-    // Spine, command module and docking port at the front, engine block aft.
-    Part(Root, TEXT("Spine"), S.Cylinder, FVector(0, 0, 0), FVector(3.0, 3.0, Length), Grey, AlongX);
-    Part(Root, TEXT("Command"), S.Cylinder, FVector(26, 0, 0), FVector(7.0, 7.0, 10.0), White, AlongX);
-    Part(Root, TEXT("CommandNose"), S.Cone, FVector(32.5, 0, 0), FVector(7.0, 7.0, 3.0), White, FRotator(-90, 0, 0));
-    Part(Root, TEXT("DockingPort"), S.Cylinder, FVector(DockingPortX, 0, 0), FVector(2.2, 2.2, 1.5), Dark, AlongX);
-    Part(Root, TEXT("Tank"), S.Cylinder, FVector(-14, 0, 0), FVector(8.0, 8.0, 14.0), Gold, AlongX);
-    Part(Root, TEXT("EngineBlock"), S.Cylinder, FVector(-26, 0, 0), FVector(9.0, 9.0, 6.0), Dark, AlongX);
+    // Hull: spine, modules, docking node, truss, solar wings, radiators, tanks and engines.
+    MeshPart(Root, TEXT("Core"), TEXT("/Game/Vehicles/Odyssey/Core/SM_Core.SM_Core"));
+    WindowMeshes.Add(MeshPart(Root, TEXT("CoreWindows"), TEXT("/Game/Vehicles/Odyssey/CoreWindows/SM_CoreWindows.SM_CoreWindows")));
+
+    // The habitat ring, its spokes and hub spin together.
+    RingRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Ring"));
+    RingRoot->SetupAttachment(Root);
+    MeshPart(RingRoot, TEXT("RingHull"), TEXT("/Game/Vehicles/Odyssey/Ring/SM_Ring.SM_Ring"));
+    WindowMeshes.Add(MeshPart(RingRoot, TEXT("RingWindows"), TEXT("/Game/Vehicles/Odyssey/RingWindows/SM_RingWindows.SM_RingWindows")));
+    for (UStaticMeshComponent* W : WindowMeshes)
+    {
+        W->SetCastShadow(false);
+    }
+
+    // Four main engines (exits at x = -274): plumes along -X.
     for (int32 k = 0; k < 4; ++k)
     {
-        const double A = k * UE_HALF_PI;
-        const FVector At(-31.0, FMath::Cos(A) * 2.6, FMath::Sin(A) * 2.6);
-        Part(Root, *FString::Printf(TEXT("Bell%d"), k), S.Cone, At, FVector(2.6, 2.6, 3.5), Steel, FRotator(90, 0, 0));
+        const FVector At(-274.0, k < 2 ? -7.0 : 7.0, k % 2 ? -7.0 : 7.0);
         UStaticMeshComponent* P = MakePart(this, Root, *FString::Printf(TEXT("ShipPlume%d"), k), S.Cone,
-            At + FVector(-12.0, 0, 0), FVector(4.0, 4.0, 22.0), FRotator(-90, 0, 0));
+            At + FVector(-35.0, 0, 0), FVector(12.0, 12.0, 70.0), FRotator(-90, 0, 0));
         P->SetCastShadow(false);
         P->SetVisibility(false);
         EnginePlumes.Add(P);
     }
-    // Radiators.
-    Part(Root, TEXT("RadiatorL"), S.Cube, FVector(-4, 0, 9.0), FVector(18.0, 0.2, 10.0), White);
-    Part(Root, TEXT("RadiatorR"), S.Cube, FVector(-4, 0, -9.0), FVector(18.0, 0.2, 10.0), White);
 
-    // The ring: 12 habitat modules on a 30 m radius, joined by spokes to a hub; it spins.
-    RingRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Ring"));
-    RingRoot->SetupAttachment(Root);
-    RingRoot->SetRelativeLocation(FVector(6.0, 0, 0) * 100.0);
-    Part(RingRoot, TEXT("Hub"), S.Cylinder, FVector(0, 0, 0), FVector(6.0, 6.0, 4.0), Grey, AlongX);
-    for (int32 k = 0; k < 12; ++k)
+    // Navigation lights: red / green on the solar wing tips (port / starboard), white on the
+    // other two; white double-flash strobes fore and aft and around the ring; a green docking
+    // target ring around the front port.
+    const double Tip = 104.0 / UE_SQRT_2;
+    AddNavLight(Root, TEXT("NavRed"), FVector(-90, -Tip, Tip), 5.0f, FLinearColor(1.0f, 0.08f, 0.05f), 1.8f, 0, 0.0f);
+    AddNavLight(Root, TEXT("NavGreen"), FVector(-90, Tip, Tip), 5.0f, FLinearColor(0.1f, 1.0f, 0.2f), 1.8f, 0, 0.0f);
+    AddNavLight(Root, TEXT("NavWhite1"), FVector(-90, -Tip, -Tip), 5.0f, FLinearColor(1.0f, 1.0f, 1.0f), 1.5f, 0, 0.0f);
+    AddNavLight(Root, TEXT("NavWhite2"), FVector(-90, Tip, -Tip), 5.0f, FLinearColor(1.0f, 1.0f, 1.0f), 1.5f, 0, 0.0f);
+    AddNavLight(Root, TEXT("StrobeFore"), FVector(106, 0, 10.5), 4.0f, FLinearColor(0.9f, 0.95f, 1.0f), 8.0f, 1, 0.0f);
+    AddNavLight(Root, TEXT("StrobeAft"), FVector(-252, 0, 14.0), 4.0f, FLinearColor(0.9f, 0.95f, 1.0f), 8.0f, 1, 0.5f);
+    for (int32 k = 0; k < 6; ++k)
     {
-        const double A = k * UE_TWO_PI / 12.0;
-        const FVector Radial(0.0, FMath::Cos(A), FMath::Sin(A));
-        const FRotator Face = FRotationMatrix::MakeFromXZ(FVector(1, 0, 0), Radial).Rotator();
-        Part(RingRoot, *FString::Printf(TEXT("Module%d"), k), S.Cube, Radial * RingRadius, FVector(5.0, 14.5, 4.0), k % 3 == 0 ? White : Grey, Face);
-        if (k % 3 == 0)
-        {
-            Part(RingRoot, *FString::Printf(TEXT("Spoke%d"), k), S.Cylinder, Radial * (RingRadius * 0.5), FVector(0.9, 0.9, RingRadius - 3.0), Grey,
-                FRotationMatrix::MakeFromZ(Radial).Rotator());
-        }
+        const double A = k * UE_TWO_PI / 6.0 + UE_PI / 6.0;
+        AddNavLight(RingRoot, *FString::Printf(TEXT("RingStrobe%d"), k), FVector(0, FMath::Cos(A), FMath::Sin(A)) * (RingRadius + 0.8),
+            3.5f, FLinearColor(0.9f, 0.95f, 1.0f), 6.0f, 1, 0.12f * k);
     }
-}
+    for (int32 k = 0; k < 8; ++k)
+    {
+        const double A = k * UE_TWO_PI / 8.0;
+        AddNavLight(Root, *FString::Printf(TEXT("DockLight%d"), k), FVector(DockingPortX, FMath::Cos(A) * 3.4, FMath::Sin(A) * 3.4),
+            0.9f, FLinearColor(0.2f, 1.0f, 0.35f), 2.5f, 2, 0.0f);
+    }
 
-UStaticMeshComponent* AAstroRingShipActor::Part(USceneComponent* Parent, const TCHAR* Name, UStaticMesh* Mesh, const FVector& CentreM, const FVector& SizeM, const FLinearColor& Colour, const FRotator& Rotation)
-{
-    UStaticMeshComponent* C = MakePart(this, Parent, Name, Mesh, CentreM, SizeM, Rotation);
-    PendingColours.Emplace(C, Colour);
-    return C;
+    // Floodlights: the docking node and port (for the approach), and back along the modules.
+    for (int32 k = 0; k < 4; ++k)
+    {
+        const float Roll = 90.0f * k;
+        const FQuat Q = FQuat(FVector::XAxisVector, FMath::DegreesToRadians(Roll));
+        AddFlood(*FString::Printf(TEXT("FloodFore%d"), k), Q.RotateVector(FVector(108, 0, 10.5)), (Q * FRotator(-12, 0, 0).Quaternion()).Rotator());
+        AddFlood(*FString::Printf(TEXT("FloodAft%d"), k), Q.RotateVector(FVector(72, 0, 10.5)), (Q * FRotator(-14, 180, 0).Quaternion()).Rotator());
+    }
 }
 
 void AAstroRingShipActor::BeginPlay()
 {
     Super::BeginPlay();
-    ApplyColours(this, PendingColours);
     for (UStaticMeshComponent* P : EnginePlumes)
     {
         PlumeMIDs.Add(MakePlumeMID(this, P));
+    }
+    if (UMaterialInterface* Light = LoadObject<UMaterialInterface>(nullptr, StationLightPath))
+    {
+        for (UStaticMeshComponent* W : WindowMeshes)
+        {
+            UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Light, this);
+            for (int32 i = 0; i < FMath::Max(1, W->GetNumMaterials()); ++i)
+            {
+                W->SetMaterial(i, MID);
+            }
+            WindowMIDs.Add(MID);
+        }
+    }
+    if (UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, StationGlowPath))
+    {
+        for (FNavLight& L : NavLights)
+        {
+            L.MID = UMaterialInstanceDynamic::Create(Glow, this);
+            L.Halo->SetMaterial(0, L.MID);
+            NavMIDs.Add(L.MID);
+        }
     }
 }
 
 void AAstroRingShipActor::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    Clock += DeltaSeconds;
     RingAngle = FMath::Fmod(RingAngle + RingRpm * 6.0f * DeltaSeconds, 360.0f);
     RingRoot->SetRelativeRotation(FRotator(0, 0, RingAngle));
+
+    // Cabin light through the windows, held at a fixed share of the exposure white so the lit
+    // decks always read (physically they would vanish against sunlit hull - a cinematic choice,
+    // like the star brightness).
+    const float W = static_cast<float>(White);
+    const float Cabin = W * 0.32f;
+    for (UMaterialInstanceDynamic* MID : WindowMIDs)
+    {
+        MID->SetVectorParameterValue(TEXT("Glow"), FLinearColor(1.0f, 0.78f, 0.5f) * Cabin);
+    }
+    for (FNavLight& L : NavLights)
+    {
+        float On = 1.0f;
+        const float T = FMath::Fmod(Clock + L.Phase * 1.3f, 1.3f);
+        if (L.Pattern == 1)
+        {
+            On = (T < 0.05f || (T > 0.17f && T < 0.22f)) ? 1.0f : 0.0f; // double flash
+        }
+        else if (L.Pattern == 2)
+        {
+            On = 0.35f + 0.65f * (0.5f + 0.5f * FMath::Sin(Clock * 3.0f)); // slow breathing
+        }
+        L.Halo->SetVisibility(On > 0.01f);
+        if (L.MID)
+        {
+            L.MID->SetVectorParameterValue(TEXT("Glow"), L.Colour * (W * L.Brightness * On));
+        }
+    }
 }
 
 void AAstroRingShipActor::SetShipTransform(const FVector& Centre, const FQuat& Rotation)
@@ -456,6 +566,7 @@ void AAstroRingShipActor::SetShipTransform(const FVector& Centre, const FQuat& R
 
 void AAstroRingShipActor::SetEngines(float Power, double ExposureWhite)
 {
+    White = ExposureWhite;
     for (int32 k = 0; k < EnginePlumes.Num(); ++k)
     {
         EnginePlumes[k]->SetVisibility(Power > 0.01f);
