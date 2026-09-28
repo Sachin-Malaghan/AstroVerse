@@ -47,8 +47,7 @@ void AAstroPlayerController::BeginPlay()
             Input->AddMappingContext(InputActions->DesktopContext, -1);
         }
     }
-    SetInputMode(FInputModeGameOnly());
-    bShowMouseCursor = false;
+    ApplyGameInputMode();
 
     if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this))
     {
@@ -178,6 +177,8 @@ void AAstroPlayerController::SetupInputComponent()
     if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InputComponent))
     {
         EIC->BindAction(InputActions->Select, ETriggerEvent::Started, this, &AAstroPlayerController::OnSelect);
+        EIC->BindAction(InputActions->Select, ETriggerEvent::Completed, this, &AAstroPlayerController::OnSelectReleased);
+        EIC->BindAction(InputActions->LockTarget, ETriggerEvent::Started, this, &AAstroPlayerController::OnLockAction);
         EIC->BindAction(InputActions->TimeFaster, ETriggerEvent::Started, this, &AAstroPlayerController::OnTimeFaster);
         EIC->BindAction(InputActions->TimeSlower, ETriggerEvent::Started, this, &AAstroPlayerController::OnTimeSlower);
         EIC->BindAction(InputActions->TimePause, ETriggerEvent::Started, this, &AAstroPlayerController::OnTimePause);
@@ -239,31 +240,110 @@ void AAstroPlayerController::SelectBody(FName BodyID)
     }
 }
 
+void AAstroPlayerController::ApplyGameInputMode()
+{
+    FInputModeGameAndUI Mode;
+    Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    Mode.SetHideCursorDuringCapture(false);
+    SetInputMode(Mode);
+    bShowMouseCursor = true;
+    DefaultMouseCursor = EMouseCursor::Default;
+}
+
+FName AAstroPlayerController::FindBodyAtScreen(FVector2D ScreenPosition, float MaxPixels) const
+{
+    const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    if (!Sim || !Sim->IsReady() || !PlayerCameraManager)
+    {
+        return NAME_None;
+    }
+    int32 SizeX = 0, SizeY = 0;
+    GetViewportSize(SizeX, SizeY);
+    const double PixelsPerRadian = 0.5 * SizeX / FMath::Tan(FMath::DegreesToRadians(0.5 * PlayerCameraManager->GetFOVAngle()));
+    const FAstroVector3d Eye = Sim->EngineToSimPosition(PlayerCameraManager->GetCameraLocation());
+    FName Best;
+    double BestScore = MaxPixels;
+    double BestDistance = TNumericLimits<double>::Max();
+    const FBodyRegistry& Registry = Sim->GetRegistry();
+    for (int32 i = 0; i < Registry.Num(); ++i)
+    {
+        const FAstroVector3d Position = Sim->GetSimulation().GetBodyState(i).Position;
+        FVector2D Screen;
+        if (!ProjectWorldLocationToScreen(Sim->SimToScaledEnginePosition(Position), Screen, false))
+        {
+            continue;
+        }
+        const double Distance = (Position - Eye).Length();
+        const double DiscPx = FMath::Asin(FMath::Min(1.0, Registry.Get(i).EquatorialRadiusMeters / Distance)) * PixelsPerRadian;
+        const double Score = FMath::Max(0.0, FVector2D::Distance(Screen, ScreenPosition) - DiscPx);
+        // Inside a disc beats a near miss; among discs the nearest body (drawn in front) wins.
+        if (Score < BestScore || (Score == 0.0 && BestScore == 0.0 && Distance < BestDistance))
+        {
+            BestScore = Score;
+            BestDistance = Distance;
+            Best = Registry.Get(i).BodyID;
+        }
+    }
+    return Best;
+}
+
 void AAstroPlayerController::OnSelect(const FInputActionValue& Value)
 {
-    const FName Under = FindBodyUnderReticle();
-    if (Under.IsNone())
+    // Press: remember where, so a drag (camera turn) isn't taken for a click.
+    float X = 0.0f, Y = 0.0f;
+    bPressWithCursor = bShowMouseCursor && GetMousePosition(X, Y);
+    PressPosition = FVector2D(X, Y);
+    if (!bPressWithCursor)
     {
-        SelectBody(NAME_None);
-        return;
+        // Gamepad / no cursor: select what the reticle is on, straight away.
+        SelectBody(FindBodyUnderReticle());
     }
-    // Selecting what's already selected toggles an observation lock on it.
-    if (Under == SelectedBody)
+}
+
+void AAstroPlayerController::OnSelectReleased(const FInputActionValue& Value)
+{
+    float X = 0.0f, Y = 0.0f;
+    if (!bPressWithCursor || !GetMousePosition(X, Y) || FVector2D::Distance(FVector2D(X, Y), PressPosition) > 6.0f)
     {
-        if (UAstroActivationSubsystem* Activation = UAstroActivationSubsystem::Get(this))
-        {
-            if (Activation->GetLockedTargets().Contains(Under))
-            {
-                Activation->ReleaseObservationLock(Under);
-            }
-            else
-            {
-                Activation->LockObservationTarget(Under);
-            }
-        }
-        return;
+        return; // that was a drag
     }
+    const FName Under = FindBodyAtScreen(FVector2D(X, Y));
+    const double Now = FPlatformTime::Seconds();
+    const bool bDouble = !Under.IsNone() && Under == LastClickBody && Now - LastClickTime < 0.4;
+    LastClickTime = Now;
+    LastClickBody = Under;
     SelectBody(Under);
+    if (bDouble)
+    {
+        // Double-click: fly into orbit around it (Solar System Scope style).
+        if (AAstroPawnBase* Viewer = Cast<AAstroPawnBase>(GetPawn()))
+        {
+            Viewer->FocusOn(Under);
+        }
+        LastClickBody = NAME_None;
+    }
+}
+
+void AAstroPlayerController::OnLockAction(const FInputActionValue& Value)
+{
+    UAstroActivationSubsystem* Activation = UAstroActivationSubsystem::Get(this);
+    if (!Activation || SelectedBody.IsNone())
+    {
+        return;
+    }
+    const bool bLocked = Activation->GetLockedTargets().Contains(SelectedBody);
+    if (bLocked)
+    {
+        Activation->ReleaseObservationLock(SelectedBody);
+    }
+    else
+    {
+        Activation->LockObservationTarget(SelectedBody);
+    }
+    if (UAstroUISubsystem* UI = UAstroUISubsystem::Get(this))
+    {
+        UI->ShowToast(FString::Printf(TEXT("%s: observation lock %s."), *SelectedBody.ToString(), bLocked ? TEXT("released") : TEXT("on (full N-body precision)")));
+    }
 }
 
 void AAstroPlayerController::OnTimeFaster(const FInputActionValue& Value)

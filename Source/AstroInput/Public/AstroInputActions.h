@@ -52,6 +52,11 @@ public:
     UPROPERTY() TObjectPtr<UInputAction> MilkyWayGuide;
     // Turn to face the Sun (U).
     UPROPERTY() TObjectPtr<UInputAction> FaceSun;
+    // Held while a mouse button is down: mouse look only applies while dragging, so the
+    // cursor is free to point and click (Solar System Scope style).
+    UPROPERTY() TObjectPtr<UInputAction> DragHold;
+    // Toggle an observation lock (full N-body precision) on the selection (K).
+    UPROPERTY() TObjectPtr<UInputAction> LockTarget;
 
     UPROPERTY() TObjectPtr<UInputMappingContext> DesktopContext;
     UPROPERTY() TObjectPtr<UInputMappingContext> VRContext;

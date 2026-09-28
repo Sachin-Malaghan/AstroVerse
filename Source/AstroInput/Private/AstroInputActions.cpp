@@ -3,6 +3,7 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
+#include "InputTriggers.h"
 #include "InputCoreTypes.h"
 
 namespace
@@ -73,6 +74,8 @@ UAstroInputActions* UAstroInputActions::Create(UObject* Outer)
     A->TourNext = MakeAction(A, TEXT("IA_TourNext"), EInputActionValueType::Boolean);
     A->MilkyWayGuide = MakeAction(A, TEXT("IA_MilkyWayGuide"), EInputActionValueType::Boolean);
     A->FaceSun = MakeAction(A, TEXT("IA_FaceSun"), EInputActionValueType::Boolean);
+    A->DragHold = MakeAction(A, TEXT("IA_DragHold"), EInputActionValueType::Boolean);
+    A->LockTarget = MakeAction(A, TEXT("IA_LockTarget"), EInputActionValueType::Boolean);
 
     A->DesktopContext = NewObject<UInputMappingContext>(A, TEXT("IMC_Desktop"));
     A->VRContext = NewObject<UInputMappingContext>(A, TEXT("IMC_VR"));
@@ -96,7 +99,13 @@ void UAstroInputActions::BuildDesktop()
     Map(C, Move, EKeys::LeftControl, 2, true);
     Map(C, Roll, EKeys::E);
     Map(C, Roll, EKeys::Q, 0, true);
-    Map(C, Look, EKeys::Mouse2D);
+    // Mouse look only while a button is held (drag); the free cursor points and clicks.
+    {
+        FEnhancedActionKeyMapping& MouseLook = C->MapKey(Look, EKeys::Mouse2D);
+        UInputTriggerChordAction* Chord = NewObject<UInputTriggerChordAction>(C);
+        Chord->ChordAction = DragHold;
+        MouseLook.Triggers.Add(Chord);
+    }
     Map(C, SpeedStep, EKeys::MouseWheelAxis);
     Map(C, SpeedStep, EKeys::Add);
     Map(C, SpeedStep, EKeys::Subtract, 0, true);
@@ -150,6 +159,8 @@ void UAstroInputActions::BuildGlobal()
 {
     UInputMappingContext* C = GlobalContext;
     Map(C, Select, EKeys::LeftMouseButton);
+    Map(C, DragHold, EKeys::LeftMouseButton);
+    Map(C, DragHold, EKeys::RightMouseButton);
     Map(C, Select, EKeys::Gamepad_RightThumbstick);
     // Mobile groundwork (Phase 12): a tap selects what's under the reticle. Touch look/move
     // gestures are left to the port.
@@ -178,5 +189,6 @@ void UAstroInputActions::BuildGlobal()
     Map(C, TourNext, EKeys::N);
     Map(C, MilkyWayGuide, EKeys::V);
     Map(C, FaceSun, EKeys::U);
+    Map(C, LockTarget, EKeys::K);
     Map(C, Menu, EKeys::Gamepad_Special_Right);
 }

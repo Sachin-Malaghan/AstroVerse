@@ -205,9 +205,9 @@ void UAstroHUDWidget::Build()
     // --- Help (F1 / H toggles the whole HUD; the help line is always there).
     HelpText = MakeText(12, Dim);
     HelpText->SetText(FText::FromString(TEXT(
-        "WASD / Space / C  fly     Mouse  look     Q E  roll     Wheel  speed     Shift  boost\n"
+        "WASD / Space / C  fly     Drag  look     Q E  roll     Wheel  speed     Shift  boost\n"
         "F  orbit the selection (mouse circles, wheel or W / S zoom; F again: free flight)     Home  back to Earth if lost\n"
-        "Click  select (again: lock)     T  travel     G  land / take off     M  galaxy     V  Milky Way guide     U  face the Sun\n"
+        "Click  select, double-click  orbit it, K  lock     T  travel     G  land / take off     M  galaxy     V  Milky Way guide     U  face the Sun\n"
         "[ ]  time slower / faster     P  pause     R  rewind     L  live (real UTC)     F2  guided tour, N  next\n"
         "H  hide HUD     Esc  menu (sun at a site, settings)")));
     Place(Root, HelpText, FAnchors(0.0f, 1.0f), FVector2D(0.0f, 1.0f), FVector2D(20, -40));
@@ -631,7 +631,7 @@ void UAstroHUDWidget::UpdateFacts()
         Lines.Add(Row->FunFact.ToString());
     }
     Lines.Add(TEXT(""));
-    Lines.Add(bLocked ? TEXT("Click again to release the lock.   T to travel here.") : TEXT("Click again to lock (full physics).   T to travel here."));
+    Lines.Add(bLocked ? TEXT("Click again to release the lock.   T to travel here.") : TEXT("Double-click to orbit, K to lock (full physics).   T to travel here."));
     FactsStats->SetText(FText::FromString(FString::Join(Lines, TEXT("\n"))));
 }
 

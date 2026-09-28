@@ -41,6 +41,13 @@ public:
     UFUNCTION(BlueprintPure, Category = "Astro|Selection")
     FName FindBodyUnderReticle(float MaxAngleDeg = 4.0f) const;
 
+    // Body under a screen position (px): inside its disc, or its centre within MaxPixels.
+    UFUNCTION(BlueprintPure, Category = "Astro|Selection")
+    FName FindBodyAtScreen(FVector2D ScreenPosition, float MaxPixels = 18.0f) const;
+
+    // Free cursor + drag-to-look (the default), restored after menus.
+    void ApplyGameInputMode();
+
     UPROPERTY(BlueprintAssignable, Category = "Astro|Selection")
     FOnAstroSelectionChanged OnSelectionChanged;
 
@@ -66,6 +73,12 @@ private:
     void OnMenuAction(const FInputActionValue& Value);
     void OnTravelAction(const FInputActionValue& Value);
     void OnHelpAction(const FInputActionValue& Value);
+    void OnSelectReleased(const FInputActionValue& Value);
+    void OnLockAction(const FInputActionValue& Value);
+    FVector2D PressPosition = FVector2D::ZeroVector;
+    bool bPressWithCursor = false;
+    double LastClickTime = -1.0;
+    FName LastClickBody;
     void OnFocusAction(const FInputActionValue& Value);
     void OnHomeAction(const FInputActionValue& Value);
     void OnGoLiveAction(const FInputActionValue& Value);

@@ -174,8 +174,12 @@ void UAstroUISubsystem::ToggleMenu()
     else
     {
         Menu->RemoveFromParent();
-        PC->SetInputMode(FInputModeGameOnly());
-        PC->bShowMouseCursor = false;
+        // Back to the game's free cursor (click to select, drag to look).
+        FInputModeGameAndUI Mode;
+        Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+        Mode.SetHideCursorDuringCapture(false);
+        PC->SetInputMode(Mode);
+        PC->bShowMouseCursor = true;
     }
     // Game pause also stops the god-mode clock (UTimeController skips paused worlds).
     UGameplayStatics::SetGamePaused(PC, bMenuOpen);

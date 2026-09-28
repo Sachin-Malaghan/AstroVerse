@@ -295,6 +295,19 @@ namespace
             if (Pawn && Args.Num() > 0) { Pawn->FaceBody(FName(*Args[0])); }
         }));
 
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdPickAt(
+        TEXT("astro.Debug.PickAt"), TEXT("astro.Debug.PickAt <x_px> <y_px> - select the body under a screen point, as a mouse click would"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            AAstroPlayerController* PC = World ? Cast<AAstroPlayerController>(World->GetFirstPlayerController()) : nullptr;
+            if (PC && Args.Num() >= 2)
+            {
+                const FName Body = PC->FindBodyAtScreen(FVector2D(FCString::Atof(*Args[0]), FCString::Atof(*Args[1])));
+                UE_LOG(LogTemp, Display, TEXT("PickAt %s,%s -> %s"), *Args[0], *Args[1], *Body.ToString());
+                PC->SelectBody(Body);
+            }
+        }));
+
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdUIToggle(
         TEXT("astro.UI.Toggle"), TEXT("astro.UI.Toggle HUD|Help|Menu"),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
