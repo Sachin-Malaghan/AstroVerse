@@ -106,7 +106,8 @@ bool UAstroTravelSubsystem::BeginTravel(FName BodyID, bool bForceCinematic)
         ArrivalDir = Rotate(ToSun, Up, FMath::DegreesToRadians(40.0));
         ArrivalDir = Rotate(ArrivalDir, ArrivalDir.Cross(Up).Normalized(), FMath::DegreesToRadians(-10.0)).Normalized();
     }
-    ActiveStyle = bForceCinematic ? EAstroTravelStyle::CinematicWarp : Settings->Style;
+    ActiveStyle = StyleOverride.IsSet() ? StyleOverride.GetValue() : bForceCinematic ? EAstroTravelStyle::CinematicWarp : Settings->Style;
+    StyleOverride.Reset();
     if (ActiveStyle == EAstroTravelStyle::RealFlight)
     {
         // Straight in: arrive on the line of approach (a last-second swing would be a jump cut).
@@ -163,6 +164,14 @@ bool UAstroTravelSubsystem::BeginTravel(FName BodyID, bool bForceCinematic)
         Settings->Clock == EAstroClockDuringTravel::Pause ? TEXT("paused") : TEXT("running"), Duration);
     OnTravelStarted.Broadcast(BodyID);
     return true;
+}
+
+bool UAstroTravelSubsystem::BeginTravelWithStyle(FName BodyID, EAstroTravelStyle Style)
+{
+    StyleOverride = Style;
+    const bool bOk = BeginTravel(BodyID, false);
+    StyleOverride.Reset();
+    return bOk;
 }
 
 void UAstroTravelSubsystem::SetPilotInput(float Throttle, const FVector2D& Steer)
@@ -248,6 +257,7 @@ void UAstroTravelSubsystem::ApplyPathPoint(double S)
     {
         Effects->Update(static_cast<float>(Warp), static_cast<float>(Distance), TunnelOffset);
     }
+    OnPathApplied.Broadcast();
 }
 
 void UAstroTravelSubsystem::ApplyRealFlight(UAstroSimulationSubsystem* Sim, AActor* View, double S)
@@ -290,6 +300,7 @@ void UAstroTravelSubsystem::ApplyRealFlight(UAstroSimulationSubsystem* Sim, AAct
     const FVector ToBody = Sim->SimToEngineDirection((BodyPos - Position).Normalized());
     const FQuat Facing = FRotationMatrix::MakeFromXZ(ToBody, FVector::UpVector).ToQuat();
     View->SetActorRotation(FQuat::Slerp(StartRotation, Facing, FMath::SmoothStep(0.0, 0.12, S)));
+    OnPathApplied.Broadcast();
 }
 
 void UAstroTravelSubsystem::FinishNow()

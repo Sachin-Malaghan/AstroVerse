@@ -11,6 +11,7 @@
 #include "Math/AstroConstants.h"
 #include "BodyTerrain.h"
 #include "AstroTourSubsystem.h"
+#include "AstroMissionSubsystem.h"
 #include "Camera/CameraComponent.h"
 #include "HAL/IConsoleManager.h"
 
@@ -416,6 +417,16 @@ void AAstroPawnBase::Tick(float DeltaSeconds)
             TickGalaxyFlight(Domains->GetGalaxyView(), DeltaSeconds);
             return;
         }
+    }
+
+    // A mission director (launch, docking) flies the camera itself.
+    if (const UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(this); Mission && Mission->IsControllingCamera())
+    {
+        Input.ConsumeLook();
+        Velocity = FVector::ZeroVector;
+        bOrbiting = false;
+        Locomotion = EAstroLocomotion::Flying;
+        return;
     }
 
     // In transit the travel system flies the view; piloted ships take throttle and steering from us.

@@ -14,6 +14,8 @@ class AAstroWarpEffects;
 class UTimeController;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAstroTravelEvent, FName, BodyID);
+// After the viewer has been placed for this frame of a transit (e.g. a ship riding along).
+DECLARE_MULTICAST_DELEGATE(FOnAstroTravelPathApplied);
 
 UCLASS()
 class ASTROTRAVEL_API UAstroTravelSubsystem : public UTickableWorldSubsystem
@@ -31,6 +33,10 @@ public:
     // e.g. for the guided tour). False if already travelling or unknown.
     UFUNCTION(BlueprintCallable, Category = "Astro|Travel")
     bool BeginTravel(FName BodyID, bool bForceCinematic = false);
+    // Same, with an explicit style (missions always fly the real-time path).
+    bool BeginTravelWithStyle(FName BodyID, EAstroTravelStyle Style);
+
+    FOnAstroTravelPathApplied OnPathApplied;
 
     // Arrives immediately (skip).
     UFUNCTION(BlueprintCallable, Category = "Astro|Travel")
@@ -88,6 +94,7 @@ private:
     float BaseFOV = 70.0f;
 
     bool bPausedClockForTravel = false;
+    TOptional<EAstroTravelStyle> StyleOverride;
     float PilotThrottle = 0.0f;
     FVector2D PilotSteer = FVector2D::ZeroVector;
     FVector2D TunnelOffset = FVector2D::ZeroVector;

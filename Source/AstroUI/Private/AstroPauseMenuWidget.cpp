@@ -78,6 +78,7 @@ void UAstroPauseMenuWidget::Build()
     UTextBlock* Clock = nullptr;
     AddButton(Box, TEXT("Resume"))->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnResumeClicked);
     AddButton(Box, TEXT("Guided tour: Sun to the Milky Way   (F2)"))->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnTourClicked);
+    AddButton(Box, TEXT("Mission: launch from Earth, dock, fly to the selected planet"))->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnMissionClicked);
     AddButton(Box, TEXT("Return home - Earth   (Home)"))->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnHomeClicked);
 
     // Sun at a site: stand on a place on Earth and see its real sky.
@@ -218,6 +219,11 @@ void UAstroPauseMenuWidget::OnSkyClicked()
 {
     AAstroSpaceEnvironment::SetMilkyWayMode(AAstroSpaceEnvironment::GetMilkyWayMode() != 0 ? 0 : 1);
     Refresh();
+}
+
+void UAstroPauseMenuWidget::OnMissionClicked()
+{
+    OnCommand.ExecuteIfBound(TEXT("Mission"));
 }
 
 void UAstroPauseMenuWidget::OnTourClicked()

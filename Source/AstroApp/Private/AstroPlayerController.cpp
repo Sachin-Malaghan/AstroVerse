@@ -19,6 +19,7 @@
 #include "HAL/IConsoleManager.h"
 #include "AstroTourSubsystem.h"
 #include "AstroSiteSubsystem.h"
+#include "AstroMissionSubsystem.h"
 #include "AstroScaleDomainSubsystem.h"
 #include "AstroSimulationSubsystem.h"
 
@@ -84,6 +85,10 @@ void AAstroPlayerController::HandleUICommand(FName Command)
     {
         ClearSite();
     }
+    else if (Command == TEXT("Mission"))
+    {
+        StartMission(SelectedBody);
+    }
 }
 
 void AAstroPlayerController::GoToSite(FName Body, double LatDeg, double LonDeg, double UtcOffsetHours, const FString& Name)
@@ -133,6 +138,35 @@ void AAstroPlayerController::FinishGoToSite()
     }
 }
 
+void AAstroPlayerController::StartMission(FName Destination)
+{
+    if (Destination.IsNone() || Destination == TEXT("Earth") || Destination == TEXT("Sun"))
+    {
+        Destination = TEXT("Mars"); // a sensible first mission
+    }
+    if (UAstroTourSubsystem* Tour = UAstroTourSubsystem::Get(this); Tour && Tour->IsRunning())
+    {
+        Tour->Stop();
+    }
+    if (UAstroScaleDomainSubsystem* Domains = UAstroScaleDomainSubsystem::Get(this); Domains && Domains->GetDomain() == EAstroScaleDomain::Galaxy)
+    {
+        Domains->RequestDomain(EAstroScaleDomain::SolarSystem);
+    }
+    double Lat = 13.7199, Lon = 80.2304;
+    FString Name = TEXT("Satish Dhawan Space Centre, Sriharikota");
+    if (const UAstroSiteSubsystem* Site = UAstroSiteSubsystem::Get(this); Site && Site->HasSite() && Site->GetReport().Body == TEXT("Earth"))
+    {
+        Lat = Site->GetReport().LatDeg;
+        Lon = Site->GetReport().LonDeg;
+        Name = Site->GetReport().Name;
+        ClearSite();
+    }
+    if (UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(this))
+    {
+        Mission->Launch(Destination, Lat, Lon, Name);
+    }
+}
+
 void AAstroPlayerController::ClearSite()
 {
     if (UAstroSiteSubsystem* Site = UAstroSiteSubsystem::Get(this))
@@ -167,6 +201,11 @@ void AAstroPlayerController::PlayerTick(float DeltaTime)
     if (Domains && Domains->GetDomain() == EAstroScaleDomain::Galaxy)
     {
         UI->SetViewerStatus(TEXT("Milky Way  -  galaxy scale"));
+        return;
+    }
+    if (const UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(this); Mission && Mission->IsControllingCamera())
+    {
+        UI->SetViewerStatus(FString::Printf(TEXT("Mission  -  %s"), *Mission->GetStatus().PhaseText));
         return;
     }
     if (const UAstroTravelSubsystem* Travel = UAstroTravelSubsystem::Get(this); Travel && Travel->IsTravelling())

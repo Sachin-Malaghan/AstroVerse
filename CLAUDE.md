@@ -158,6 +158,10 @@ VR stays built but is parked for later (user decision); the work below is deskto
 ### Real-world Earth tiles (2026-09-28)
 - `UAstroEarthTilesSubsystem` (AstroRendering) bridges to Cesium for Unreal by reflection (no build dependency): below `ActivateBelowKm` over Earth, in Earth's co-rotating frame (axes already match Cesium's +X east / +Y south / +Z up), it spawns a georeference at our render origin (kept on it through rebases) and a tileset (Google Photorealistic 3D Tiles by API key, or a Cesium ion asset), hiding our Earth there. Keys live in per-user GameUserSettings, never git. Untested until the plugin is installed; see SETUP.md section 6 for setup and known limitations.
 
+### Missions (2026-09-28)
+- `UAstroMissionSubsystem` (AstroTravel) directs a crewed mission: T-10 countdown on a real pad (the active Earth site, else Sriharikota; jumps to 10:00 local if it is dark), ascent along a tabulated gravity-turn profile to a 200 km orbit (T+0-20 s at 1x, then ~9x; Max-Q, MECO + staging with the booster falling away, second-stage ignition, fairing separation, SECO at T+9:00, 7.8 km/s), coast and rendezvous with the ring ship *Odyssey* (our own design, not a film replica), docking, crew transfer, then `BeginTravelWithStyle(RealFlight)` with the ship riding in front of the camera (`OnPathApplied`), and parking in orbit at the destination. Launch through docking is in Earth's body-fixed frame (the pad stays put). The camera is placed *before* the vehicles each frame (they are positioned in the frame it sets up).
+- Vehicles: `AAstroRocketActor`, `AAstroRingShipActor` - engine basic shapes, `M_ShipHull`, and the additive `M_Exhaust` plume (fades toward the open end, so the cone cap never shows). Start: pause menu "Mission", or `astro.Mission.Launch [Body] [lat lon]`; `astro.Mission.Abort`.
+
 ## Decided — travel (Phase 9, decided 2026-09-27)
 
 - **Two player-selectable transit styles**, both built: a **cinematic warp** (fixed camera sequence with a stylized warp effect) and a **player-piloted ship** the user flies through the warp. The choice is a user setting, not a build-time switch.

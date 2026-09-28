@@ -84,6 +84,8 @@ private:
     void UpdateSite();
     void UpdateSkyGuide();
     void UpdateSunPointer();
+    void UpdateMission();
+    bool bMissionCaption = false;
     void UpdateOrbits(float DeltaTime);
     void UpdateBodyList();
     void AddToggle(class UHorizontalBox* Row, const FString& Label, const FString& CVar);

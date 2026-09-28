@@ -42,6 +42,7 @@ private:
     UFUNCTION() void OnCreditsClicked();
     UFUNCTION() void OnQuitClicked();
     UFUNCTION() void OnTourClicked();
+    UFUNCTION() void OnMissionClicked();
     UFUNCTION() void OnSkyClicked();
     UFUNCTION() void OnSunClicked();
     UFUNCTION() void OnHomeClicked();

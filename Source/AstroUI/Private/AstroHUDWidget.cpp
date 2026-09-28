@@ -5,6 +5,7 @@
 #include "AstroTravelSubsystem.h"
 #include "AstroUIFormat.h"
 #include "AstroSiteSubsystem.h"
+#include "AstroMissionSubsystem.h"
 #include "Physics/KeplerOrbit.h"
 #include "Rendering/DrawElements.h"
 #include "HAL/IConsoleManager.h"
@@ -304,6 +305,7 @@ void UAstroHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     UpdateOrbits(InDeltaTime);
     UpdateBodyList();
     UpdateSunPointer();
+    UpdateMission();
     if (ToastRemaining > 0.0f)
     {
         ToastRemaining -= InDeltaTime;
@@ -531,6 +533,47 @@ int32 UAstroHUDWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Allo
             ESlateDrawEffect::None, Line.Color, true, Line.Thickness);
     }
     return Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId + 1, InWidgetStyle, bParentEnabled);
+}
+
+void UAstroHUDWidget::UpdateMission()
+{
+    const UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(this);
+    if (!Mission || !Mission->GetStatus().bActive || bCompact)
+    {
+        if (bMissionCaption)
+        {
+            HideCaption();
+            bMissionCaption = false;
+        }
+        return;
+    }
+    const FAstroMissionStatus& S = Mission->GetStatus();
+    FString Clock;
+    if (S.Phase == EAstroMissionPhase::Countdown)
+    {
+        Clock = FString::Printf(TEXT("T-%02d"), FMath::CeilToInt(-S.MissionSeconds));
+    }
+    else
+    {
+        const int32 T = FMath::FloorToInt(FMath::Max(S.MissionSeconds, 0.0));
+        Clock = FString::Printf(TEXT("T+%02d:%02d"), T / 60, T % 60);
+    }
+    FString Body;
+    if (S.Phase <= EAstroMissionPhase::Docked)
+    {
+        Body = FString::Printf(TEXT("%s     %s\nAltitude %.1f km     Speed %.2f km/s     Downrange %.0f km"),
+            *Clock, *S.PhaseText, S.AltitudeKm, S.SpeedKmS, S.DownrangeKm);
+    }
+    else
+    {
+        Body = S.PhaseText;
+    }
+    if (!S.EventText.IsEmpty())
+    {
+        Body += TEXT("\n\n") + S.EventText;
+    }
+    ShowCaption(S.Title, Body, TEXT("Esc -> menu     astro.Mission.Abort to end"));
+    bMissionCaption = true;
 }
 
 void UAstroHUDWidget::UpdateSunPointer()

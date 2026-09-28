@@ -37,6 +37,9 @@ public:
     void GoToSite(FName Body, double LatDeg, double LonDeg, double UtcOffsetHours, const FString& Name);
     void ClearSite();
 
+    // Crewed mission: rocket from the active Earth site (else Sriharikota) to Destination.
+    void StartMission(FName Destination);
+
     // Body nearest the view center within MaxAngleDeg (or covering the center).
     UFUNCTION(BlueprintPure, Category = "Astro|Selection")
     FName FindBodyUnderReticle(float MaxAngleDeg = 4.0f) const;

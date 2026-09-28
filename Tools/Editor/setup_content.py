@@ -535,6 +535,26 @@ def build_warp_materials():
     log("Built warp materials")
 
 
+def build_mission_materials():
+    """Missions: additive engine plume."""
+    m = fresh_material("M_Exhaust")
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    m.set_editor_property("two_sided", True)
+    g = Graph(m)
+    inputs = {
+        "N": g.node(unreal.MaterialExpressionVertexNormalWS),
+        "V": g.node(unreal.MaterialExpressionCameraVectorWS),
+        "Z": g.mask(g.local_pos(), False, False, True, False),
+        "Glow": g.vector("Glow", (8.0, 4.0, 1.5, 1)),
+    }
+    c = g.custom("Exhaust.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT3)
+    g.wire(c, inputs)
+    MEL.connect_material_property(c, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    finish(m)
+    log("Built mission materials")
+
+
 def build_galaxy_materials():
     """Galaxy scale-domain (Phase 10): raymarched Milky Way volume and marker glow."""
     m = fresh_material("M_GalaxyVolume")
@@ -670,6 +690,7 @@ corona = build_corona()
 star_field = build_star_field()
 build_warp_materials()
 build_galaxy_materials()
+build_mission_materials()
 build_instances(surface, sun, rings, star_field)
 build_level()
 log("Done")
