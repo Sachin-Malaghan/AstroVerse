@@ -59,6 +59,7 @@ void AAstroPlayerController::BeginPlay()
             GoToSite(TEXT("Earth"), Lat, Lon, Zone, Name);
         });
         UI->OnCommand.AddUObject(this, &AAstroPlayerController::HandleUICommand);
+        UI->OnMissionRequested.AddWeakLambda(this, [this](FName Body, bool bPilot) { StartMission(Body, bPilot); });
         UI->OnBodyRequested.AddWeakLambda(this, [this](FName Body)
         {
             SelectBody(Body);
@@ -138,7 +139,7 @@ void AAstroPlayerController::FinishGoToSite()
     }
 }
 
-void AAstroPlayerController::StartMission(FName Destination)
+void AAstroPlayerController::StartMission(FName Destination, bool bPiloted)
 {
     if (Destination.IsNone() || Destination == TEXT("Earth") || Destination == TEXT("Sun"))
     {
@@ -163,7 +164,7 @@ void AAstroPlayerController::StartMission(FName Destination)
     }
     if (UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(this))
     {
-        Mission->Launch(Destination, Lat, Lon, Name);
+        Mission->Launch(Destination, Lat, Lon, Name, bPiloted);
     }
 }
 
@@ -496,6 +497,11 @@ void AAstroPlayerController::OnTourAction(const FInputActionValue& Value)
 
 void AAstroPlayerController::OnTourNextAction(const FInputActionValue& Value)
 {
+    if (UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(this); Mission && Mission->IsPiloting())
+    {
+        Mission->RequestAutoDock(); // N during a piloted docking hands it to the autopilot
+        return;
+    }
     if (UAstroTourSubsystem* Tour = UAstroTourSubsystem::Get(this))
     {
         Tour->Next();

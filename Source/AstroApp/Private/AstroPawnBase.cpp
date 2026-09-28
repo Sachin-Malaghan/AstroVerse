@@ -420,9 +420,13 @@ void AAstroPawnBase::Tick(float DeltaSeconds)
     }
 
     // A mission director (launch, docking) flies the camera itself.
-    if (const UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(this); Mission && Mission->IsControllingCamera())
+    if (UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(this); Mission && Mission->IsControllingCamera())
     {
-        Input.ConsumeLook();
+        const FVector2D MissionLook = Input.ConsumeLook();
+        if (Mission->IsPiloting())
+        {
+            Mission->SetPilotInput(Input.MoveAxis, MissionLook, Input.bBoost);
+        }
         Velocity = FVector::ZeroVector;
         bOrbiting = false;
         Locomotion = EAstroLocomotion::Flying;
@@ -433,7 +437,11 @@ void AAstroPawnBase::Tick(float DeltaSeconds)
     if (UAstroTravelSubsystem* Travel = UAstroTravelSubsystem::Get(this); Travel && Travel->IsTravelling())
     {
         const FVector2D Look = Input.ConsumeLook();
-        if (Travel->GetActiveStyle() == EAstroTravelStyle::PilotedShip)
+        if (Travel->GetActiveStyle() == EAstroTravelStyle::RealFlight)
+        {
+            Travel->SetPilotInput(static_cast<float>(Input.MoveAxis.X), FVector2D::ZeroVector);
+        }
+        else if (Travel->GetActiveStyle() == EAstroTravelStyle::PilotedShip)
         {
             Travel->SetPilotInput(static_cast<float>(Input.MoveAxis.X), FVector2D(Look.X + Input.MoveAxis.Y * 4.0, Look.Y));
         }

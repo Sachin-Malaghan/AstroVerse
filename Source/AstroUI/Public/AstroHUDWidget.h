@@ -41,6 +41,8 @@ public:
 };
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnAstroBodyRequested, FName);
+// Mission panel: destination and whether you pilot it.
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnAstroMissionRequested, FName, bool);
 
 UCLASS()
 class ASTROUI_API UAstroHUDWidget : public UUserWidget
@@ -66,6 +68,8 @@ public:
 
     // The body list asks for a body (select + fly into orbit); AstroApp acts on it.
     FOnAstroBodyRequested OnBodyRequested;
+    FOnAstroMissionRequested OnMissionRequested;
+    void ToggleMissionPanel() { OnMissionButtonClicked(); }
     void RequestBody(FName BodyID) { OnBodyRequested.Broadcast(BodyID); }
 
 protected:
@@ -86,6 +90,10 @@ private:
     void UpdateSunPointer();
     void UpdateMission();
     bool bMissionCaption = false;
+    void DockCaption(bool bMissionLayout);
+    UPROPERTY() TObjectPtr<class UCanvasPanelSlot> CaptionSlot;
+    UPROPERTY() TObjectPtr<class USizeBox> CaptionSizeBox;
+    UPROPERTY() TObjectPtr<UTextBlock> MissionButtonLabel;
     void UpdateOrbits(float DeltaTime);
     void UpdateBodyList();
     void AddToggle(class UHorizontalBox* Row, const FString& Label, const FString& CVar);
@@ -97,6 +105,17 @@ private:
     UFUNCTION() void OnSlowerClicked();
     UFUNCTION() void OnFasterClicked();
     UFUNCTION() void OnLiveClicked();
+    UFUNCTION() void OnMissionButtonClicked();
+    UFUNCTION() void OnMissionPrevClicked();
+    UFUNCTION() void OnMissionNextClicked();
+    UFUNCTION() void OnMissionModeClicked();
+    UFUNCTION() void OnMissionLaunchClicked();
+    void RefreshMissionPanel(int32 Step);
+    UPROPERTY() TObjectPtr<UBorder> MissionPanel;
+    UPROPERTY() TObjectPtr<UTextBlock> MissionDestText;
+    UPROPERTY() TObjectPtr<UTextBlock> MissionModeText;
+    FName MissionDestination = TEXT("Mars");
+    bool bMissionPilot = true;
 
     UPROPERTY() TObjectPtr<UCanvasPanel> Root;
     UPROPERTY() TObjectPtr<UCanvasPanel> MarkerLayer;

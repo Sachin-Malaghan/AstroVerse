@@ -38,7 +38,7 @@ public:
     void ClearSite();
 
     // Crewed mission: rocket from the active Earth site (else Sriharikota) to Destination.
-    void StartMission(FName Destination);
+    void StartMission(FName Destination, bool bPiloted = false);
 
     // Body nearest the view center within MaxAngleDeg (or covering the center).
     UFUNCTION(BlueprintPure, Category = "Astro|Selection")

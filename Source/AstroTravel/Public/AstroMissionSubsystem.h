@@ -27,6 +27,7 @@ enum class EAstroMissionPhase : uint8
     Docked,
     Departure,
     Parked,
+    Failed,
 };
 
 struct FAstroMissionStatus
@@ -40,6 +41,8 @@ struct FAstroMissionStatus
     double AltitudeKm = 0.0;
     double SpeedKmS = 0.0;
     double DownrangeKm = 0.0;
+    bool bPiloted = false;
+    FString PilotText;   // telemetry + controls while you fly it
 };
 
 UCLASS()
@@ -56,7 +59,18 @@ public:
     static UAstroMissionSubsystem* Get(const UObject* WorldContext);
 
     // Launch from (geodetic lat, east lon) on Earth to Destination. SiteName is for the HUD.
-    bool Launch(FName Destination, double LatDeg, double LonDeg, const FString& SiteName);
+    // bPiloted: you fly the ascent (throttle, pitch) and the docking (RCS); otherwise autopilot.
+    bool Launch(FName Destination, double LatDeg, double LonDeg, const FString& SiteName, bool bPiloted = false);
+
+    // Pilot controls, fed by the pawn every frame: Move = (forward/back, right/left, up/down),
+    // Look = mouse drag, bBoost = Shift.
+    void SetPilotInput(const FVector& Move, const FVector2D& Look, bool bBoost);
+    // Hand the docking to the autopilot (N).
+    void RequestAutoDock() { bAutoDock = true; }
+    // Scripted tests: a held control input that overrides the pawn's (zero = off).
+    void SetDebugPilotInput(const FVector& Move) { DebugMove = Move; }
+    FVector DebugMove = FVector::ZeroVector;
+    bool IsPiloting() const;
     void Abort();
 
     // True while the director drives the camera (the pawn stands down).
@@ -68,6 +82,10 @@ public:
 private:
     // Earth body-fixed trajectory point (m) at mission time T (s), and the flight direction.
     FAstroVector3d TrajectoryBF(double T, double* OutAltitude = nullptr, double* OutDownrange = nullptr) const;
+    FAstroVector3d PointBF(double DownrangeM, double AltitudeM) const;
+    void StepPilotAscent(double RealDt);
+    void StepPilotDocking(double RealDt);
+    void Fail(const FString& Why);
     FAstroVector3d BodyFixedToSim(const UAstroSimulationSubsystem* Sim, const FAstroVector3d& BF) const;
     FAstroVector3d BodyFixedDirToSim(const UAstroSimulationSubsystem* Sim, const FAstroVector3d& Dir) const;
     FVector ToEngine(const UAstroSimulationSubsystem* Sim, const FAstroVector3d& BF) const;
@@ -99,6 +117,25 @@ private:
     int32 NextEvent = 0;
     double SeparationTime = 0.0, FairingTime = 0.0;
     FAstroVector3d SeparationBF, SeparationVelBF, FairingBF, FairingVelBF;
+
+    // Orbit reached (autopilot: the profile's SECO; piloted: wherever you made orbit).
+    double OrbitX0 = 0.0, OrbitH = 0.0, OrbitGround = 0.0, OrbitT0 = 0.0;
+
+    // Piloted flight state.
+    bool bPiloted = false;
+    FVector PilotMove = FVector::ZeroVector;
+    FVector2D PilotLook = FVector2D::ZeroVector;
+    bool bPilotBoost = false;
+    double PX = 0.0, PH = 0.0, PVh = 0.0, PVx = 0.0; // downrange (m), altitude (m), vertical / inertial horizontal speed (m/s)
+    double PThrottle = 0.0, PPitch = 0.0;            // 0..1, degrees from vertical
+    int32 PStage = 1;
+    double PUsed1 = 0.0, PUsed2 = 0.0, PIgniteTimer = 0.0;
+    bool bPIgnited2 = false, bPLiftoff = false, bPMaxQ = false;
+    double CosLat = 1.0;
+    // Docking: capsule offset from the orbit point (along-track, side, up) and velocity.
+    FVector DockR = FVector::ZeroVector, DockV = FVector::ZeroVector;
+    bool bAutoDock = false;
+    static constexpr double PilotShipAhead = 300.0;
 
     // Parked ship: offset from the destination body (sim frame) and orientation.
     FAstroVector3d ParkedOffset;

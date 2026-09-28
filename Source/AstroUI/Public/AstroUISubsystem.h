@@ -12,6 +12,7 @@ class UAstroHUDWidget;
 DECLARE_MULTICAST_DELEGATE_FourParams(FOnAstroUISiteRequest, double, double, double, const FString&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnAstroUICommand, FName);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnAstroUIBodyRequested, FName);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnAstroUIMissionRequested, FName, bool);
 class UAstroPauseMenuWidget;
 enum class EAstroScaleDomain : uint8;
 
@@ -46,6 +47,7 @@ public:
     FOnAstroUICommand OnCommand;
     // Body list clicks: select and fly into orbit.
     FOnAstroUIBodyRequested OnBodyRequested;
+    FOnAstroUIMissionRequested OnMissionRequested;
 
 private:
     void LoadFacts();

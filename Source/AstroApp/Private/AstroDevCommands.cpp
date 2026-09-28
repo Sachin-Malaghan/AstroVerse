@@ -4,6 +4,7 @@
 #include "AstroPawnBase.h"
 #include "AstroPlayerController.h"
 #include "AstroUISubsystem.h"
+#include "AstroHUDWidget.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Containers/Ticker.h"
@@ -318,7 +319,7 @@ namespace
         }));
 
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdUIToggle(
-        TEXT("astro.UI.Toggle"), TEXT("astro.UI.Toggle HUD|Help|Menu"),
+        TEXT("astro.UI.Toggle"), TEXT("astro.UI.Toggle HUD|Help|Menu|Mission"),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
         {
             UAstroUISubsystem* UI = World ? UAstroUISubsystem::Get(World->GetFirstPlayerController()) : nullptr;
@@ -328,6 +329,7 @@ namespace
             }
             if (Args[0] == TEXT("Help")) { UI->ToggleHelp(); }
             else if (Args[0] == TEXT("Menu")) { UI->ToggleMenu(); }
+            else if (Args[0] == TEXT("Mission")) { if (UI->GetHUD()) { UI->GetHUD()->ToggleMissionPanel(); } }
             else { UI->ToggleHUD(); }
         }));
 }

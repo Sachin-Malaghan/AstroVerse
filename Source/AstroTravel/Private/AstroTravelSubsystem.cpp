@@ -200,6 +200,12 @@ void UAstroTravelSubsystem::Tick(float DeltaTime)
         TunnelOffset = (TunnelOffset + PilotSteer * 0.02).ClampAxes(-1.0, 1.0) * FMath::Exp(-0.8 * DeltaTime);
         PilotSteer = FVector2D::ZeroVector;
     }
+    else if (ActiveStyle == EAstroTravelStyle::RealFlight)
+    {
+        // Real flight: W/S trims the cruise between 0.25x and 2.5x.
+        Progress = FMath::Min(1.0, Progress + DeltaTime / Duration * FMath::Clamp(1.0 + 1.5 * PilotThrottle, 0.25, 2.5));
+        PilotThrottle = 0.0f;
+    }
     else
     {
         Progress = FMath::Min(1.0, Elapsed / Duration);
