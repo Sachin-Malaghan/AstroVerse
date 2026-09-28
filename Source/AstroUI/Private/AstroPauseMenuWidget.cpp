@@ -102,6 +102,9 @@ void UAstroPauseMenuWidget::Build()
     UTextBlock* Sky = nullptr;
     AddButton(Box, TEXT(""), &Sky)->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnSkyClicked);
     SkyLabel = Sky;
+    UTextBlock* SunText = nullptr;
+    AddButton(Box, TEXT(""), &SunText)->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnSunClicked);
+    SunLabel = SunText;
     AddButton(Box, TEXT("Exposure  +"))->OnClicked.AddDynamic(this, &UAstroPauseMenuWidget::OnBrighterClicked);
     ExposureLabel = NewText(WidgetTree, 14, FLinearColor(0.62f, 0.68f, 0.78f, 1.0f));
     Box->AddChildToVerticalBox(ExposureLabel)->SetHorizontalAlignment(HAlign_Center);
@@ -129,6 +132,11 @@ void UAstroPauseMenuWidget::Refresh()
     ClockLabel->SetText(FText::FromString(Settings->Clock == EAstroClockDuringTravel::Pause ? TEXT("Clock during travel:  Paused") : TEXT("Clock during travel:  Keeps running")));
     SkyLabel->SetText(FText::FromString(AAstroSpaceEnvironment::GetMilkyWayMode() != 0
         ? TEXT("Milky Way:  Enhanced (easy to see)") : TEXT("Milky Way:  Realistic (as photographed)")));
+    if (IConsoleVariable* SunLook = IConsoleManager::Get().FindConsoleVariable(TEXT("astro.Sun.Look")))
+    {
+        static const TCHAR* Names[] = { TEXT("Sun:  Physical (real brightness)"), TEXT("Sun:  Natural (white, as from space)"), TEXT("Sun:  Stylized (Solar System Scope)") };
+        SunLabel->SetText(FText::FromString(Names[FMath::Clamp(SunLook->GetInt(), 0, 2)]));
+    }
     float Exposure = 0.0f;
     if (IConsoleVariable* CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("astro.Render.ExposureCompensation")))
     {
@@ -192,6 +200,15 @@ UEditableTextBox* UAstroPauseMenuWidget::AddField(UHorizontalBox* Row, const FSt
     Size.Value = Width; // relative share of the row
     FieldSlot->SetSize(Size);
     return Field;
+}
+
+void UAstroPauseMenuWidget::OnSunClicked()
+{
+    if (IConsoleVariable* SunLook = IConsoleManager::Get().FindConsoleVariable(TEXT("astro.Sun.Look")))
+    {
+        SunLook->Set((SunLook->GetInt() + 1) % 3, ECVF_SetByCode);
+    }
+    Refresh();
 }
 
 void UAstroPauseMenuWidget::OnSkyClicked()

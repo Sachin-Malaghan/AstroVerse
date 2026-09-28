@@ -3,6 +3,9 @@
 #include "AstroBody.h"
 #include "AstroRenderingSettings.h"
 #include "AstroSimulationSubsystem.h"
+#include "AstroRenderingSubsystem.h"
+#include "AstroSpaceEnvironment.h"
+#include "HAL/IConsoleManager.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -176,14 +179,31 @@ void UBodyShadingComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
         const double Luminance = Definition->LuminosityWatts / (4.0 * AstroConstants::Pi * R * R) * Efficacy / AstroConstants::Pi;
         const UAstroRenderingSettings* Settings = GetDefault<UAstroRenderingSettings>();
         const double Disk = FMath::Min(Luminance, Settings->SunDiskLuminanceCap);
+        // Cinematic look: relative to the white point at the current exposure (see settings).
+        static IConsoleVariable* SunLook = IConsoleManager::Get().RegisterConsoleVariable(
+            TEXT("astro.Sun.Look"), 1, TEXT("Sun: 0 = physical (real brightness), 1 = natural (white from space, surface visible), 2 = stylized (Solar System Scope orange)."), ECVF_Default);
+        const int32 Look = SunLook->GetInt();
+        const bool bCinematic = Look != 0;
+        const bool bStylized = Look == 2;
+        double White = 0.0;
+        if (const UAstroRenderingSubsystem* Rendering = UAstroRenderingSubsystem::Get(this); Rendering && Rendering->GetEnvironment())
+        {
+            White = 1.2 * FMath::Pow(2.0, Rendering->GetEnvironment()->GetExposureEV100());
+        }
+        const bool bUseCinematic = bCinematic && White > 0.0;
+        const double DiskShown = bUseCinematic ? FMath::Min(Disk, (bStylized ? Settings->CinematicSunDisc : Settings->NaturalSunDisc) * White) : Disk;
         if (SurfaceMID)
         {
-            SurfaceMID->SetScalarParameterValue(TEXT("Luminance"), Disk);
+            SurfaceMID->SetScalarParameterValue(TEXT("Luminance"), DiskShown);
             SurfaceMID->SetScalarParameterValue(TEXT("Time"), Time);
+            SurfaceMID->SetScalarParameterValue(TEXT("ColorMix"), static_cast<float>(bUseCinematic && bStylized ? Settings->CinematicSunColorMix : 0.15));
+            SurfaceMID->SetScalarParameterValue(TEXT("Detail"), static_cast<float>(bUseCinematic ? (bStylized ? Settings->CinematicSunDetail : Settings->NaturalSunDetail) : 1.0));
         }
         if (Corona)
         {
-            Corona->SetCoronaLuminance(Disk * Settings->CoronaLuminanceFraction);
+            Corona->SetCoronaLuminance(DiskShown * Settings->CoronaLuminanceFraction * (bUseCinematic ? 40.0 : 1.0));
+            Corona->SetHaloLuminance(bUseCinematic ? (bStylized ? Settings->CinematicSunHalo : Settings->NaturalSunHalo) * White : 0.0, bStylized ? 1.0 : 0.0);
+            // Far away the Sun is a point: its true flux keeps it the brightest thing in the sky.
             Corona->SetDiskLuminance(Disk);
         }
         return;

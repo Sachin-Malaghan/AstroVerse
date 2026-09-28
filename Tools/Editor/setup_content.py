@@ -408,6 +408,8 @@ def build_sun_surface():
         "SunTex": g.texture("SunTex", WHITE),
         "Luminance": g.scalar("Luminance", 2.0e8),
         "Time": g.scalar("Time", 0.0),
+        "ColorMix": g.scalar("ColorMix", 0.15),
+        "Detail": g.scalar("Detail", 1.0),
     }
     c = g.custom("SunSurface.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT3)
     g.wire(c, inputs)
@@ -429,6 +431,8 @@ def build_corona():
         "Time": g.node(unreal.MaterialExpressionTime),
         "PointSigma": g.scalar("PointSigma", 0.0),
         "PointLuminance": g.scalar("PointLuminance", 0.0),
+        "HaloLuminance": g.scalar("HaloLuminance", 0.0),
+        "HaloWarmth": g.scalar("HaloWarmth", 0.0),
     }
     c = g.custom("SunCorona.hlsl", list(inputs.keys()), unreal.CustomMaterialOutputType.CMOT_FLOAT3)
     g.wire(c, inputs)

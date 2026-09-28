@@ -43,6 +43,7 @@ private:
     UFUNCTION() void OnQuitClicked();
     UFUNCTION() void OnTourClicked();
     UFUNCTION() void OnSkyClicked();
+    UFUNCTION() void OnSunClicked();
     UFUNCTION() void OnHomeClicked();
     UFUNCTION() void OnSiteClicked();
     UFUNCTION() void OnClearSiteClicked();
@@ -52,6 +53,7 @@ private:
     UPROPERTY() TObjectPtr<UTextBlock> ClockLabel;
     UPROPERTY() TObjectPtr<UTextBlock> ExposureLabel;
     UPROPERTY() TObjectPtr<UTextBlock> SkyLabel;
+    UPROPERTY() TObjectPtr<UTextBlock> SunLabel;
     UPROPERTY() TObjectPtr<UTextBlock> CreditsText;
     UPROPERTY() TObjectPtr<UEditableTextBox> LatBox;
     UPROPERTY() TObjectPtr<UEditableTextBox> LonBox;

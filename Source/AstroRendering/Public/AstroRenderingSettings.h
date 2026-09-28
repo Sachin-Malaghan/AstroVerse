@@ -56,6 +56,33 @@ public:
     UPROPERTY(Config, EditAnywhere, Category = "Photometry")
     double CoronaLuminanceFraction = 1.5e-5;
 
+    // Sun looks (astro.Sun.Look): 0 physical (real brightness: a dazzling white disc),
+    // 1 natural (default: white as seen from space - the Sun is ~5800 K and only looks
+    // yellow through an atmosphere - but held just under the white point so its surface
+    // shows, with a soft white halo), 2 stylized (Solar System Scope: orange with a golden
+    // halo). Disc and halo values are relative to the white point at the current exposure.
+    UPROPERTY(Config, EditAnywhere, Category = "Photometry")
+    double CinematicSunDisc = 1.9;
+
+    UPROPERTY(Config, EditAnywhere, Category = "Photometry")
+    double CinematicSunHalo = 0.9;
+
+    UPROPERTY(Config, EditAnywhere, Category = "Photometry")
+    double CinematicSunColorMix = 0.7; // stylized; natural keeps 0.15 (white)
+
+    UPROPERTY(Config, EditAnywhere, Category = "Photometry")
+    double CinematicSunDetail = 1.5;
+
+    // Natural look: a white disc needs more contrast and less halo to show its surface.
+    UPROPERTY(Config, EditAnywhere, Category = "Photometry")
+    double NaturalSunDisc = 1.0;
+
+    UPROPERTY(Config, EditAnywhere, Category = "Photometry")
+    double NaturalSunDetail = 3.5;
+
+    UPROPERTY(Config, EditAnywhere, Category = "Photometry")
+    double NaturalSunHalo = 0.35;
+
     // Exposure follows an incident-light meter reading of the sunlight at the camera:
     // EV100 = log2(E / 2.5) + compensation. "Sunny 16" at 1 AU is ~15.6.
     UPROPERTY(Config, EditAnywhere, Category = "Exposure")

@@ -21,6 +21,7 @@ public:
     void SetCoronaLuminance(double Luminance);
     // Photosphere luminance, for the far-away point-source glow.
     void SetDiskLuminance(double Luminance) { DiskLuminance = Luminance; }
+    void SetHaloLuminance(double Luminance, double Warmth = 0.0);
 
     virtual void OnRegister() override;
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;

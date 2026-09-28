@@ -139,8 +139,12 @@ void AAstroSpaceEnvironment::Tick(float DeltaSeconds)
     SunLuxAtCamera = Registry.Get(StarIndex).LuminosityWatts / (4.0 * AstroConstants::Pi * Distance * Distance) * Settings->LuminousEfficacy;
 
     // Incident-light meter (calibration constant C = 250): EV100 = log2(E * 100 / C) = log2(E / 2.5).
-    const double TargetEV = FMath::Log2(FMath::Max(SunLuxAtCamera, 1e-3) / 2.5)
+    double TargetEV = FMath::Log2(FMath::Max(SunLuxAtCamera, 1e-3) / 2.5)
         - Settings->ExposureCompensation - CVarAstroExposureCompensation.GetValueOnGameThread();
+    // The engine's cached lighting (Lumen / sky capture) can't represent exposures above
+    // EV ~24 in FP16; skimming the Sun reaches 27. Cap it: only within ~0.1 AU of the Sun
+    // does anything read brighter than it would, and the cinematic Sun is exposure-relative.
+    TargetEV = FMath::Min(TargetEV, 23.5);
     if (!bExposureInitialized)
     {
         CurrentEV100 = TargetEV;

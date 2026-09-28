@@ -9,6 +9,8 @@
 //   Time          float
 //   PointSigma    float   point-source glow width (solar radii), 0 = off
 //   PointLuminance float  its peak (cd/m^2)
+//   HaloLuminance float   halo just outside the limb (0 = physical corona only)
+//   HaloWarmth    float   0 = white (natural: the Sun seen from space), 1 = golden (stylized)
 //
 // Point source (CLAUDE.md "Performance" / far views): once the photosphere shrinks below a
 // couple of pixels it stops rasterizing reliably, so its flux is redistributed into a
@@ -34,4 +36,6 @@ float falloff = 0.85 * pow(r, -8.0) + 0.15 * pow(r, -3.0);
 float streak = 0.55 + 0.45 * pow(abs(sin(angle * 3.0 + sin(angle * 7.0 + Time * 0.01) * 0.6)), 3.0);
 float edge = saturate((CoronaExtent - r) / (CoronaExtent * 0.25)); // fade out before the quad edge
 float3 tint = float3(1.0, 0.93, 0.85);
-return glow + tint * Luminance * falloff * lerp(1.0, streak, saturate((r - 1.0) * 2.0)) * edge;
+// Cinematic halo: a warm glow hugging the limb and a softer outer aura (Solar System Scope look).
+float3 halo = lerp(float3(1.0, 0.97, 0.92), float3(1.0, 0.78, 0.4), HaloWarmth) * HaloLuminance * (exp(-(r - 1.0) * 4.5) * 0.8 + exp(-(r - 1.0) * 0.9) * 0.4) * edge;
+return glow + halo + tint * Luminance * falloff * lerp(1.0, streak, saturate((r - 1.0) * 2.0)) * edge;

@@ -49,6 +49,15 @@ void USunCoronaComponent::SetCoronaLuminance(double Luminance)
     }
 }
 
+void USunCoronaComponent::SetHaloLuminance(double Luminance, double Warmth)
+{
+    if (CoronaMID)
+    {
+        CoronaMID->SetScalarParameterValue(TEXT("HaloLuminance"), static_cast<float>(Luminance));
+        CoronaMID->SetScalarParameterValue(TEXT("HaloWarmth"), static_cast<float>(Warmth));
+    }
+}
+
 void USunCoronaComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);

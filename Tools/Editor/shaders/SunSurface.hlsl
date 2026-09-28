@@ -7,6 +7,9 @@
 //   SunTex        Texture equirect photosphere map
 //   Luminance     float   disk-center luminance (real Sun ~1.6e9; clamped by caller for FP16)
 //   Time          float   seconds, for granulation drift
+//   ColorMix      float   how much of the map's orange hue to keep: 0.15 physical (the real
+//                         photosphere is white), ~0.9 cinematic (Solar System Scope look)
+//   Detail        float   contrast of the granulation / sunspot texture (1 physical, >1 cinematic)
 
 const float PI = 3.14159265;
 float3 d = normalize(LocalPos);
@@ -27,10 +30,11 @@ float lum = dot(surface, float3(0.2126, 0.7152, 0.0722));
 surface = surface / max(lum, 1e-3);
 // The source map is strongly orange; the real photosphere is white (~5800 K). Keep only
 // a hint of the map's hue so bloom and the tonemapper don't turn the Sun into an orange ball.
-surface = lerp(float3(1.0, 0.98, 0.95), surface, 0.15);
+surface = lerp(float3(1.0, 0.98, 0.95), surface, ColorMix);
 
 // Limb darkening, I(mu)/I(1) = 1 - u (1 - mu), stronger in blue (Neckel & Labs-like).
 float mu = saturate(dot(d, normalize(ViewDirLocal)));
 float3 u = float3(0.55, 0.65, 0.78);
 float3 limb = 1.0 - u * (1.0 - mu);
-return surface * limb * Luminance * lerp(0.85, 1.15, lum);
+float detail = saturate(0.5 + (lum - 0.5) * Detail);
+return surface * limb * Luminance * lerp(0.85, 1.15, detail);
