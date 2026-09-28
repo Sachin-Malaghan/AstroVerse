@@ -85,12 +85,14 @@ void USunCoronaComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
         if (Weight > 0.0 && DiskPx > 0.0 && DiskLuminance > 0.0)
         {
             double S = 1.2 / DiskPx; // solar radii per ~1.2 px
-            const double MaxPeak = 3.0e4;
+            const double MaxPeak = 6.0e4; // below FP16 max (65504)
             // Flux of the disk (L * pi R^2) = peak * 2 pi sigma^2.
             double P = Weight * DiskLuminance / (2.0 * S * S);
             if (P > MaxPeak)
             {
-                S = FMath::Sqrt(Weight * DiskLuminance / (2.0 * MaxPeak));
+                // Too bright to hold in ~1 px: widen, but never past ~3 px - beyond that a
+                // point source reads as a ball; bloom supplies the rest of the glare.
+                S = FMath::Min(FMath::Sqrt(Weight * DiskLuminance / (2.0 * MaxPeak)), 3.0 / DiskPx);
                 P = MaxPeak;
             }
             Sigma = static_cast<float>(S);

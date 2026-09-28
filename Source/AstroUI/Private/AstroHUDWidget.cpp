@@ -5,6 +5,9 @@
 #include "AstroTravelSubsystem.h"
 #include "AstroUIFormat.h"
 #include "AstroSiteSubsystem.h"
+#include "Physics/KeplerOrbit.h"
+#include "Rendering/DrawElements.h"
+#include "HAL/IConsoleManager.h"
 #include "AstroRenderingSubsystem.h"
 #include "AstroSpaceEnvironment.h"
 #include "AstroScaleDomainSubsystem.h"
@@ -181,6 +184,26 @@ void UAstroHUDWidget::Build()
     Place(Root, SiteSize, FAnchors(0.0f, 0.0f), FVector2D(0.0f, 0.0f), FVector2D(20, 100));
     SitePanel->SetVisibility(ESlateVisibility::Collapsed);
 
+    // --- Body list (left): the Sun, planets, dwarf planets; a planet's moons under it.
+    UBorder* ListPanel = WidgetTree->ConstructWidget<UBorder>();
+    ListPanel->SetBrushColor(PanelColor);
+    ListPanel->SetPadding(FMargin(8, 6));
+    BodyList = WidgetTree->ConstructWidget<UVerticalBox>();
+    ListPanel->AddChild(BodyList);
+    Place(Root, ListPanel, FAnchors(0.0f, 0.5f), FVector2D(0.0f, 0.5f), FVector2D(12, 20));
+
+    // --- View options (bottom left, above the help line): Solar System Scope-style toggles.
+    UBorder* Options = WidgetTree->ConstructWidget<UBorder>();
+    Options->SetBrushColor(PanelColor);
+    Options->SetPadding(FMargin(6, 4));
+    UHorizontalBox* OptionRow = WidgetTree->ConstructWidget<UHorizontalBox>();
+    Options->AddChild(OptionRow);
+    AddToggle(OptionRow, TEXT("Orbits"), TEXT("astro.UI.Orbits"));
+    AddToggle(OptionRow, TEXT("Labels"), TEXT("astro.UI.Labels"));
+    AddToggle(OptionRow, TEXT("Milky Way"), TEXT("astro.Sky.MilkyWay"));
+    AddToggle(OptionRow, TEXT("Sky guide"), TEXT("astro.Sky.MilkyWayGuide"));
+    Place(Root, Options, FAnchors(0.0f, 1.0f), FVector2D(0.0f, 1.0f), FVector2D(12, -30));
+
     // --- Caption (guided tour narration), above the toasts.
     CaptionPanel = WidgetTree->ConstructWidget<UBorder>();
     CaptionPanel->SetBrushColor(PanelColor);
@@ -277,12 +300,236 @@ void UAstroHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     UpdateTravel();
     UpdateSite();
     UpdateSkyGuide();
+    UpdateOrbits(InDeltaTime);
+    UpdateBodyList();
     UpdateSunPointer();
     if (ToastRemaining > 0.0f)
     {
         ToastRemaining -= InDeltaTime;
         ToastText->SetRenderOpacity(FMath::Clamp(ToastRemaining, 0.0f, 1.0f));
     }
+}
+
+static TAutoConsoleVariable<int32> CVarAstroUIOrbits(TEXT("astro.UI.Orbits"), 1, TEXT("Show orbit lines."));
+static TAutoConsoleVariable<int32> CVarAstroUILabels(TEXT("astro.UI.Labels"), 1, TEXT("Show body labels."));
+
+void UAstroBodyButtonHandler::OnClicked()
+{
+    if (HUD.IsValid())
+    {
+        HUD->RequestBody(BodyID);
+    }
+}
+
+void UAstroToggleHandler::OnClicked()
+{
+    if (IConsoleVariable* CVar = IConsoleManager::Get().FindConsoleVariable(*CVarName))
+    {
+        CVar->Set(CVar->GetInt() != 0 ? 0 : 1, ECVF_SetByCode);
+    }
+    Refresh();
+}
+
+void UAstroToggleHandler::Refresh() const
+{
+    const IConsoleVariable* CVar = IConsoleManager::Get().FindConsoleVariable(*CVarName);
+    const bool bOn = CVar && CVar->GetInt() != 0;
+    if (Text.IsValid())
+    {
+        Text->SetText(FText::FromString(Label));
+        Text->SetColorAndOpacity(FSlateColor(bOn ? FLinearColor(1.0f, 0.85f, 0.5f, 1.0f) : FLinearColor(0.5f, 0.55f, 0.65f, 1.0f)));
+    }
+}
+
+void UAstroHUDWidget::AddToggle(UHorizontalBox* Row, const FString& Label, const FString& CVar)
+{
+    UTextBlock* Text = nullptr;
+    UButton* Button = MakeButton(Label, Text);
+    UAstroToggleHandler* Handler = NewObject<UAstroToggleHandler>(this);
+    Handler->CVarName = CVar;
+    Handler->Label = Label;
+    Handler->Text = Text;
+    Button->OnClicked.AddDynamic(Handler, &UAstroToggleHandler::OnClicked);
+    ToggleHandlers.Add(Handler);
+    Row->AddChildToHorizontalBox(Button)->SetPadding(FMargin(2, 0));
+}
+
+void UAstroHUDWidget::UpdateBodyList()
+{
+    const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    if (!Sim || !Sim->IsReady() || !BodyList || bCompact)
+    {
+        return;
+    }
+    for (UAstroToggleHandler* Toggle : ToggleHandlers)
+    {
+        Toggle->Refresh(); // keys (V, menu) change the same settings
+    }
+    // Moons of the selected planet (or of the selected moon's planet) are listed under it.
+    const FBodyRegistry& Registry = Sim->GetRegistry();
+    const int32 Sel = Sim->FindBodyIndex(SelectedBody);
+    int32 Expanded = INDEX_NONE;
+    if (Sel != INDEX_NONE)
+    {
+        Expanded = Registry.Get(Sel).BodyType == EAstroBodyType::Moon ? Registry.Get(Sel).ParentIndex : Sel;
+    }
+    const FName ExpandedID = Expanded != INDEX_NONE ? Registry.Get(Expanded).BodyID : NAME_None;
+    if (bBodyListBuilt && ExpandedID == BodyListBuiltFor)
+    {
+        for (const TPair<FName, TWeakObjectPtr<UTextBlock>>& Entry : BodyListLabels)
+        {
+            if (Entry.Value.IsValid())
+            {
+                Entry.Value->SetColorAndOpacity(FSlateColor(Entry.Key == SelectedBody ? Accent : FLinearColor(0.88f, 0.9f, 0.96f, 1.0f)));
+            }
+        }
+        return;
+    }
+    bBodyListBuilt = true;
+    BodyListBuiltFor = ExpandedID;
+    BodyList->ClearChildren();
+    BodyHandlers.Reset();
+    BodyListLabels.Reset();
+    auto AddEntry = [&](int32 Index, bool bIndent)
+    {
+        const FBodyDefinition& Def = Registry.Get(Index);
+        UTextBlock* Text = nullptr;
+        UButton* Button = MakeButton((bIndent ? TEXT("    ") : TEXT("")) + Def.DisplayName.ToString(), Text);
+        Text->SetFont(FCoreStyle::GetDefaultFontStyle("Regular", bIndent ? 11 : 13));
+        Text->SetJustification(ETextJustify::Left);
+        Button->SetBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f));
+        UAstroBodyButtonHandler* Handler = NewObject<UAstroBodyButtonHandler>(this);
+        Handler->BodyID = Def.BodyID;
+        Handler->HUD = this;
+        Button->OnClicked.AddDynamic(Handler, &UAstroBodyButtonHandler::OnClicked);
+        BodyHandlers.Add(Handler);
+        BodyListLabels.Emplace(Def.BodyID, Text);
+        BodyList->AddChildToVerticalBox(Button)->SetHorizontalAlignment(HAlign_Fill);
+    };
+    // Order: star, then planets / dwarf planets by distance, each followed by its moons if expanded.
+    TArray<int32> Primaries;
+    for (int32 i = 0; i < Registry.Num(); ++i)
+    {
+        if (Registry.Get(i).BodyType != EAstroBodyType::Moon)
+        {
+            Primaries.Add(i);
+        }
+    }
+    Primaries.Sort([&](int32 A, int32 B) { return Registry.Get(A).Elements.SemiMajorAxis < Registry.Get(B).Elements.SemiMajorAxis; });
+    for (int32 Index : Primaries)
+    {
+        AddEntry(Index, false);
+        if (Index == Expanded)
+        {
+            for (int32 m = 0; m < Registry.Num(); ++m)
+            {
+                if (Registry.Get(m).ParentIndex == Index && Registry.Get(m).BodyType == EAstroBodyType::Moon)
+                {
+                    AddEntry(m, true);
+                }
+            }
+        }
+    }
+}
+
+void UAstroHUDWidget::UpdateOrbits(float DeltaTime)
+{
+    ScreenLines.Reset();
+    const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    APlayerController* PC = GetOwningPlayer();
+    const UAstroScaleDomainSubsystem* Domains = UAstroScaleDomainSubsystem::Get(this);
+    if (bCompact || !CVarAstroUIOrbits.GetValueOnGameThread() || !Sim || !Sim->IsReady() || !PC || !PC->PlayerCameraManager
+        || (Domains && Domains->GetDomain() == EAstroScaleDomain::Galaxy))
+    {
+        return;
+    }
+    const FBodyRegistry& Registry = Sim->GetRegistry();
+    const FSolarSystemSimulation& State = Sim->GetSimulation();
+    // Orbit shapes change slowly: rebuild from osculating elements a few times a second.
+    OrbitRefreshTimer -= DeltaTime;
+    if (OrbitRefreshTimer <= 0.0 || OrbitPaths.Num() == 0)
+    {
+        OrbitRefreshTimer = 0.5;
+        OrbitPaths.Reset();
+        for (int32 i = 0; i < Registry.Num(); ++i)
+        {
+            const FBodyDefinition& Def = Registry.Get(i);
+            if (Def.ParentIndex == INDEX_NONE)
+            {
+                continue;
+            }
+            FOrbitalState Rel;
+            Rel.Position = State.GetBodyState(i).Position - State.GetBodyState(Def.ParentIndex).Position;
+            Rel.Velocity = State.GetBodyState(i).Velocity - State.GetBodyState(Def.ParentIndex).Velocity;
+            const double Mu = Registry.GetOrbitMu(i);
+            const FKeplerElements Elements = KeplerOrbit::ElementsFromState(Rel, Mu, State.GetSimSeconds());
+            if (Elements.Eccentricity >= 0.99)
+            {
+                continue;
+            }
+            FOrbitPath& Path = OrbitPaths.AddDefaulted_GetRef();
+            Path.Body = i;
+            Path.Parent = Def.ParentIndex;
+            const double Period = KeplerOrbit::OrbitalPeriod(Elements, Mu);
+            const int32 N = Def.BodyType == EAstroBodyType::Moon ? 96 : 180;
+            for (int32 k = 0; k <= N; ++k)
+            {
+                Path.Points.Add(KeplerOrbit::StateAtTime(Elements, Mu, State.GetSimSeconds() + Period * k / N).Position);
+            }
+        }
+    }
+    const FAstroVector3d Eye = Sim->EngineToSimPosition(PC->PlayerCameraManager->GetCameraLocation());
+    const float Scale = UWidgetLayoutLibrary::GetViewportScale(this);
+    const int32 Selected = Sim->FindBodyIndex(SelectedBody);
+    for (const FOrbitPath& Path : OrbitPaths)
+    {
+        const FBodyDefinition& Def = Registry.Get(Path.Body);
+        const FAstroVector3d Centre = State.GetBodyState(Path.Parent).Position;
+        const bool bMoon = Def.BodyType == EAstroBodyType::Moon;
+        const double OrbitSize = Path.Points.Num() > 0 ? Path.Points[0].Length() : 0.0;
+        // Moon orbits only when close enough to see them apart from their planet.
+        if (bMoon && (Centre - Eye).Length() > OrbitSize * 60.0)
+        {
+            continue;
+        }
+        const bool bSel = Path.Body == Selected;
+        FScreenLine Line;
+        Line.Color = bSel ? FLinearColor(1.0f, 0.8f, 0.4f, 0.9f) : (bMoon ? FLinearColor(0.5f, 0.65f, 0.8f, 0.35f) : FLinearColor(0.45f, 0.62f, 0.9f, 0.55f));
+        Line.Thickness = bSel ? 1.8f : 1.1f;
+        for (const FAstroVector3d& Point : Path.Points)
+        {
+            FVector2D Screen;
+            if (PC->ProjectWorldLocationToScreen(Sim->SimToScaledEnginePosition(Centre + Point), Screen, false))
+            {
+                Line.Points.Add(Screen / Scale);
+            }
+            else if (Line.Points.Num() > 1)
+            {
+                ScreenLines.Add(Line); // behind the camera: break the line
+                Line.Points.Reset();
+            }
+            else
+            {
+                Line.Points.Reset();
+            }
+        }
+        if (Line.Points.Num() > 1)
+        {
+            ScreenLines.Add(MoveTemp(Line));
+        }
+    }
+}
+
+int32 UAstroHUDWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const
+{
+    // Orbit lines under the rest of the HUD.
+    for (const FScreenLine& Line : ScreenLines)
+    {
+        FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Line.Points,
+            ESlateDrawEffect::None, Line.Color, true, Line.Thickness);
+    }
+    return Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId + 1, InWidgetStyle, bParentEnabled);
 }
 
 void UAstroHUDWidget::UpdateSunPointer()
@@ -521,7 +768,7 @@ void UAstroHUDWidget::UpdateMarkers()
         // Hide labels for bodies that already fill a good part of the view, and for moons
         // crowded against their planet (unless selected).
         const double AngularDeg = FMath::RadiansToDegrees(FMath::Asin(FMath::Min(1.0, Body.EquatorialRadiusMeters / Distance)));
-        bool bShow = bOnScreen && AngularDeg < FOV * 0.15;
+        bool bShow = bOnScreen && AngularDeg < FOV * 0.15 && (CVarAstroUILabels.GetValueOnGameThread() != 0 || Body.BodyID == SelectedBody);
         // Behind a nearer body's disk (e.g. Uranus seen "through" Earth).
         for (int32 j = 0; bShow && j < Registry.Num(); ++j)
         {

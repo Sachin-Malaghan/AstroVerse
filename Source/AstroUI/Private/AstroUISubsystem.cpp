@@ -54,6 +54,7 @@ void UAstroUISubsystem::Create(APlayerController* PC, bool bVR)
 
     HUD = CreateWidget<UAstroHUDWidget>(PC, UAstroHUDWidget::StaticClass());
     HUD->SetFacts(&Facts);
+    HUD->OnBodyRequested.AddWeakLambda(this, [this](FName Body) { OnBodyRequested.Broadcast(Body); });
     HUD->SetCompact(bVR);
     if (!bVR)
     {

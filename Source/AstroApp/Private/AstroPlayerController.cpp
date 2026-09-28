@@ -58,6 +58,14 @@ void AAstroPlayerController::BeginPlay()
             GoToSite(TEXT("Earth"), Lat, Lon, Zone, Name);
         });
         UI->OnCommand.AddUObject(this, &AAstroPlayerController::HandleUICommand);
+        UI->OnBodyRequested.AddWeakLambda(this, [this](FName Body)
+        {
+            SelectBody(Body);
+            if (AAstroPawnBase* Viewer = Cast<AAstroPawnBase>(GetPawn()))
+            {
+                Viewer->FocusOn(Body);
+            }
+        });
     }
 }
 
@@ -275,7 +283,13 @@ FName AAstroPlayerController::FindBodyAtScreen(FVector2D ScreenPosition, float M
         }
         const double Distance = (Position - Eye).Length();
         const double DiscPx = FMath::Asin(FMath::Min(1.0, Registry.Get(i).EquatorialRadiusMeters / Distance)) * PixelsPerRadian;
-        const double Score = FMath::Max(0.0, FVector2D::Distance(Screen, ScreenPosition) - DiscPx);
+        double Score = FMath::Max(0.0, FVector2D::Distance(Screen, ScreenPosition) - DiscPx);
+        // The HUD label sits just right of the dot: clicking its text counts too.
+        const FVector2D Offset = ScreenPosition - Screen;
+        if (Offset.X > 0.0 && Offset.X < 160.0 && FMath::Abs(Offset.Y) < 10.0)
+        {
+            Score = FMath::Min(Score, 1.0);
+        }
         // Inside a disc beats a near miss; among discs the nearest body (drawn in front) wins.
         if (Score < BestScore || (Score == 0.0 && BestScore == 0.0 && Distance < BestDistance))
         {
