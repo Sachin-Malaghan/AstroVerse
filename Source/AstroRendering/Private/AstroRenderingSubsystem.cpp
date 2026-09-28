@@ -4,6 +4,7 @@
 #include "AstroRenderingSettings.h"
 #include "AstroSimulationSubsystem.h"
 #include "AstroSpaceEnvironment.h"
+#include "AstroBeltActor.h"
 #include "AstroTerrainActor.h"
 #include "BodyShadingComponent.h"
 #include "Engine/DataTable.h"
@@ -114,6 +115,9 @@ bool UAstroRenderingSubsystem::TryDecorate()
     FActorSpawnParameters Params;
     Params.Name = TEXT("AstroSpaceEnvironment");
     Environment = GetWorld()->SpawnActor<AAstroSpaceEnvironment>(Params);
+    FActorSpawnParameters BeltParams;
+    BeltParams.Name = TEXT("AstroBelts");
+    GetWorld()->SpawnActor<AAstroBeltActor>(BeltParams);
     FActorSpawnParameters TerrainParams;
     TerrainParams.Name = TEXT("AstroTerrain");
     Terrain = GetWorld()->SpawnActor<AAstroTerrainActor>(TerrainParams);

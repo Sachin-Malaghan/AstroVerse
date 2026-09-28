@@ -1,6 +1,8 @@
 // See CLAUDE.md Phase 6.
 #include "SunCoronaComponent.h"
 #include "AstroRenderingSettings.h"
+#include "AstroRenderingSubsystem.h"
+#include "AstroSpaceEnvironment.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -85,7 +87,13 @@ void USunCoronaComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
         if (Weight > 0.0 && DiskPx > 0.0 && DiskLuminance > 0.0)
         {
             double S = 1.2 / DiskPx; // solar radii per ~1.2 px
-            const double MaxPeak = 6.0e4; // below FP16 max (65504)
+            // Brilliant but bounded: ~30x the white point (enough for a crisp bloom halo, not a
+            // screen-filling flare far out where exposure is low), and below FP16's 65504.
+            double MaxPeak = 6.0e4;
+            if (const UAstroRenderingSubsystem* Rendering = UAstroRenderingSubsystem::Get(this); Rendering && Rendering->GetEnvironment())
+            {
+                MaxPeak = FMath::Min(MaxPeak, 30.0 * 1.2 * FMath::Pow(2.0, Rendering->GetEnvironment()->GetExposureEV100()));
+            }
             // Flux of the disk (L * pi R^2) = peak * 2 pi sigma^2.
             double P = Weight * DiskLuminance / (2.0 * S * S);
             if (P > MaxPeak)

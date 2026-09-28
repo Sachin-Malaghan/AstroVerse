@@ -48,7 +48,7 @@ bool FAstroRegistryTest::RunTest(const FString& Parameters)
     {
         return false;
     }
-    TestEqual(TEXT("Sun + 8 planets + 8 moons"), Registry.Num(), 17);
+    TestEqual(TEXT("Sun + 8 planets + 5 dwarf planets + 21 moons"), Registry.Num(), 35);
 
     const int32 Sun = Registry.FindIndex(TEXT("Sun"));
     const int32 Earth = Registry.FindIndex(TEXT("Earth"));

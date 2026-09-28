@@ -16,3 +16,21 @@ Europa,/Game/Rendering/Materials/Bodies/MI_Europa.MI_Europa,0,0,"(X=0,Y=0,Z=0)",
 Ganymede,/Game/Rendering/Materials/Bodies/MI_Ganymede.MI_Ganymede,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,"Procedural. Albedo ~0.43."
 Callisto,/Game/Rendering/Materials/Bodies/MI_Callisto.MI_Callisto,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,"Procedural. Albedo ~0.22."
 Titan,/Game/Rendering/Materials/Bodies/MI_Titan.MI_Titan,0,600,"(X=1,Y=2,Z=5)",40,60,40,0.7,"(R=1,G=0.55,B=0.2,A=1)",None,"Procedural; thick orange photochemical haze."
+Ceres,/Game/Rendering/Materials/Bodies/MI_Ceres.MI_Ceres,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Pluto,/Game/Rendering/Materials/Bodies/MI_Pluto.MI_Pluto,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Eris,/Game/Rendering/Materials/Bodies/MI_Eris.MI_Eris,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Haumea,/Game/Rendering/Materials/Bodies/MI_Haumea.MI_Haumea,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Makemake,/Game/Rendering/Materials/Bodies/MI_Makemake.MI_Makemake,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Charon,/Game/Rendering/Materials/Bodies/MI_Charon.MI_Charon,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Mimas,/Game/Rendering/Materials/Bodies/MI_Mimas.MI_Mimas,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Enceladus,/Game/Rendering/Materials/Bodies/MI_Enceladus.MI_Enceladus,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Tethys,/Game/Rendering/Materials/Bodies/MI_Tethys.MI_Tethys,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Dione,/Game/Rendering/Materials/Bodies/MI_Dione.MI_Dione,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Rhea,/Game/Rendering/Materials/Bodies/MI_Rhea.MI_Rhea,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Iapetus,/Game/Rendering/Materials/Bodies/MI_Iapetus.MI_Iapetus,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Miranda,/Game/Rendering/Materials/Bodies/MI_Miranda.MI_Miranda,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Ariel,/Game/Rendering/Materials/Bodies/MI_Ariel.MI_Ariel,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Umbriel,/Game/Rendering/Materials/Bodies/MI_Umbriel.MI_Umbriel,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Titania,/Game/Rendering/Materials/Bodies/MI_Titania.MI_Titania,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Oberon,/Game/Rendering/Materials/Bodies/MI_Oberon.MI_Oberon,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.
+Triton,/Game/Rendering/Materials/Bodies/MI_Triton.MI_Triton,0,0,"(X=0,Y=0,Z=0)",8,0,1.2,0.76,"(R=1,G=1,B=1,A=1)",None,Procedural albedo (published colour); no map sourced.

@@ -16,3 +16,21 @@ Europa,False,True,200,200,0.45,0.4,0.05,10,,,0,0,0,0,0,"Young smooth ice."
 Ganymede,False,True,800,400,0.5,0.8,1.0,50,,,0,0,0,0,0,"Procedural."
 Callisto,False,True,1000,400,0.5,1.0,2.5,60,,,0,0,0,0,0,"Most heavily cratered body in the solar system."
 Titan,False,True,300,500,0.45,0.4,0.02,20,,,0,0,0,0,0,"Procedural; dunes and lakes not yet modeled."
+Ceres,False,True,1446,193,0.5,0.8,1.5,38.6,,,0,0,0,0,0,Procedural.
+Pluto,False,True,3565,475,0.5,0.8,1.5,95.1,,,0,0,0,0,0,Procedural.
+Eris,False,True,3489,465,0.5,0.8,1.5,93.0,,,0,0,0,0,0,Procedural.
+Haumea,False,True,3000,400,0.5,0.8,1.5,80.0,,,0,0,0,0,0,Procedural.
+Makemake,False,True,2145,286,0.5,0.8,1.5,57.2,,,0,0,0,0,0,Procedural.
+Charon,False,True,1818,242,0.5,0.8,1.5,48.5,,,0,0,0,0,0,Procedural.
+Mimas,False,True,623,83,0.5,0.8,1.5,16.6,,,0,0,0,0,0,Procedural.
+Enceladus,False,True,770,103,0.5,0.8,0.3,20.5,,,0,0,0,0,0,Procedural.
+Tethys,False,True,1615,215,0.5,0.8,1.5,43.1,,,0,0,0,0,0,Procedural.
+Dione,False,True,1690,225,0.5,0.8,1.5,45.1,,,0,0,0,0,0,Procedural.
+Rhea,False,True,2295,306,0.5,0.8,1.5,61.2,,,0,0,0,0,0,Procedural.
+Iapetus,False,True,2237,298,0.5,0.8,1.5,59.7,,,0,0,0,0,0,Procedural.
+Miranda,False,True,721,96,0.5,0.8,1.5,19.2,,,0,0,0,0,0,Procedural.
+Ariel,False,True,1743,232,0.5,0.8,0.3,46.5,,,0,0,0,0,0,Procedural.
+Umbriel,False,True,1754,234,0.5,0.8,1.5,46.8,,,0,0,0,0,0,Procedural.
+Titania,False,True,2367,316,0.5,0.8,1.5,63.1,,,0,0,0,0,0,Procedural.
+Oberon,False,True,2284,305,0.5,0.8,1.5,60.9,,,0,0,0,0,0,Procedural.
+Triton,False,True,4000,541,0.5,0.8,0.3,108.3,,,0,0,0,0,0,Procedural.

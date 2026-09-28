@@ -200,6 +200,7 @@ void UAstroHUDWidget::Build()
     Options->AddChild(OptionRow);
     AddToggle(OptionRow, TEXT("Orbits"), TEXT("astro.UI.Orbits"));
     AddToggle(OptionRow, TEXT("Labels"), TEXT("astro.UI.Labels"));
+    AddToggle(OptionRow, TEXT("Belts"), TEXT("astro.UI.Belts"));
     AddToggle(OptionRow, TEXT("Milky Way"), TEXT("astro.Sky.MilkyWay"));
     AddToggle(OptionRow, TEXT("Sky guide"), TEXT("astro.Sky.MilkyWayGuide"));
     Place(Root, Options, FAnchors(0.0f, 1.0f), FVector2D(0.0f, 1.0f), FVector2D(12, -30));
@@ -574,7 +575,8 @@ void UAstroHUDWidget::UpdateSunPointer()
     }
     Towards.Normalize();
     const FVector2D Half = ViewportSize / Scale * 0.5f;
-    const FVector2D Pos = Half + FVector2D(Towards.X * (Half.X - 150.0f), Towards.Y * (Half.Y - 60.0f));
+    // Keep clear of the body list (left) and the facts card (right).
+    const FVector2D Pos = Half + FVector2D(Towards.X * (Half.X - 420.0f), Towards.Y * (Half.Y - 110.0f));
     const double LightSeconds = Distance / 299792458.0;
     const FString Light = LightSeconds < 3600.0
         ? FString::Printf(TEXT("%d min %02d s"), FMath::FloorToInt(LightSeconds / 60.0), FMath::FloorToInt(FMath::Fmod(LightSeconds, 60.0)))
