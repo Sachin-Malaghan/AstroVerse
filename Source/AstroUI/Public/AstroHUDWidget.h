@@ -114,6 +114,13 @@ private:
     UPROPERTY() TObjectPtr<UBorder> MissionPanel;
     UPROPERTY() TObjectPtr<UTextBlock> MissionDestText;
     UPROPERTY() TObjectPtr<UTextBlock> MissionModeText;
+    UPROPERTY() TObjectPtr<UTextBlock> MissionHeadText;
+    UPROPERTY() TObjectPtr<UTextBlock> MissionInfoText;
+    UPROPERTY() TObjectPtr<UTextBlock> MissionGoText;
+    UPROPERTY() TObjectPtr<UWidget> MissionDestRow;
+    UPROPERTY() TObjectPtr<UWidget> MissionModeButton;
+    bool bMissionChoosing = false; // panel is in "choose destination in orbit" mode
+    void SetMissionPanelMode(bool bChoosing);
     FName MissionDestination = TEXT("Mars");
     bool bMissionPilot = true;
 

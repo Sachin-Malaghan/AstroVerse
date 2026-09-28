@@ -43,6 +43,8 @@ struct FAstroMissionStatus
     double DownrangeKm = 0.0;
     bool bPiloted = false;
     FString PilotText;   // telemetry + controls while you fly it
+    bool bAwaitingDestination = false; // docked in Earth orbit, waiting for ChooseDestination
+    FName Destination;   // None until chosen in orbit
 };
 
 UCLASS()
@@ -59,7 +61,7 @@ public:
     static UAstroMissionSubsystem* Get(const UObject* WorldContext);
 
     // Launch from (geodetic lat, east lon) on Earth to Destination. SiteName is for the HUD.
-    // bPiloted: you fly the ascent (throttle, pitch) and the docking (RCS); otherwise autopilot.
+    // bPiloted: the autopilot flies the ascent, you fly the docking (RCS) and the cruise; astro.Mission.PilotAscent 1 hands you the ascent too.
     bool Launch(FName Destination, double LatDeg, double LonDeg, const FString& SiteName, bool bPiloted = false);
 
     // Pilot controls, fed by the pawn every frame: Move = (forward/back, right/left, up/down),
@@ -67,6 +69,8 @@ public:
     void SetPilotInput(const FVector& Move, const FVector2D& Look, bool bBoost);
     // Hand the docking to the autopilot (N).
     void RequestAutoDock() { bAutoDock = true; }
+    // The destination is decided in Earth orbit, aboard the ship (Launch may pass None).
+    bool ChooseDestination(FName Body);
     // Scripted tests: a held control input that overrides the pawn's (zero = off).
     void SetDebugPilotInput(const FVector& Move) { DebugMove = Move; }
     FVector DebugMove = FVector::ZeroVector;
@@ -123,6 +127,8 @@ private:
 
     // Piloted flight state.
     bool bPiloted = false;
+    bool bPilotAscent = false;
+    FString LaunchSiteName;
     FVector PilotMove = FVector::ZeroVector;
     FVector2D PilotLook = FVector2D::ZeroVector;
     bool bPilotBoost = false;

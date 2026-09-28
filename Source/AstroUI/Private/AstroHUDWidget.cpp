@@ -223,10 +223,10 @@ void UAstroHUDWidget::Build()
         UVerticalBox* Box = WidgetTree->ConstructWidget<UVerticalBox>();
         MissionPanel->AddChild(Box);
         UTextBlock* Head = MakeText(18, Accent);
-        Head->SetText(FText::FromString(TEXT("Crewed mission")));
+        MissionHeadText = Head;
         Box->AddChildToVerticalBox(Head)->SetPadding(FMargin(0, 0, 0, 4));
         UTextBlock* Info = MakeText(12, Dim);
-        Info->SetText(FText::FromString(TEXT("Rocket from Earth to orbit, dock with the ring ship Odyssey,\nthen fly to the destination.")));
+        MissionInfoText = Info;
         Box->AddChildToVerticalBox(Info)->SetPadding(FMargin(0, 0, 0, 8));
 
         UHorizontalBox* DestRow = WidgetTree->ConstructWidget<UHorizontalBox>();
@@ -240,22 +240,26 @@ void UAstroHUDWidget::Build()
         DestRow->AddChildToHorizontalBox(MissionDestText)->SetPadding(FMargin(10, 3, 10, 0));
         DestRow->AddChildToHorizontalBox(Next);
         Box->AddChildToVerticalBox(DestRow)->SetPadding(FMargin(0, 0, 0, 6));
+        MissionDestRow = DestRow;
 
         UTextBlock* ModeLabel = nullptr;
         UButton* Mode = MakeButton(TEXT(""), ModeLabel);
         MissionModeText = ModeLabel;
+        MissionModeButton = Mode;
         Mode->OnClicked.AddDynamic(this, &UAstroHUDWidget::OnMissionModeClicked);
         Box->AddChildToVerticalBox(Mode)->SetPadding(FMargin(0, 0, 0, 6));
 
         UTextBlock* LaunchLabel = nullptr;
         UButton* Launch = MakeButton(TEXT("  LAUNCH  "), LaunchLabel);
         LaunchLabel->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 17));
+        MissionGoText = LaunchLabel;
         LaunchLabel->SetColorAndOpacity(FSlateColor(FLinearColor(0.4f, 1.0f, 0.5f, 1.0f)));
         Launch->SetBackgroundColor(FLinearColor(0.05f, 0.25f, 0.08f, 0.95f));
         Launch->OnClicked.AddDynamic(this, &UAstroHUDWidget::OnMissionLaunchClicked);
         Box->AddChildToVerticalBox(Launch);
         Place(Root, MissionPanel, FAnchors(1.0f, 1.0f), FVector2D(1.0f, 1.0f), FVector2D(-16, -60));
         MissionPanel->SetVisibility(ESlateVisibility::Collapsed);
+        SetMissionPanelMode(false);
         RefreshMissionPanel(0);
     }
 
@@ -617,6 +621,7 @@ void UAstroHUDWidget::UpdateMission()
             DockCaption(false);
             bMissionCaption = false;
             MissionButtonLabel->SetText(FText::FromString(TEXT("  MISSION  -  launch a rocket  ")));
+            SetMissionPanelMode(false);
         }
         return;
     }
@@ -653,6 +658,18 @@ void UAstroHUDWidget::UpdateMission()
     {
         DockCaption(true);
         MissionButtonLabel->SetText(FText::FromString(TEXT("  ABORT MISSION  ")));
+        MissionPanel->SetVisibility(ESlateVisibility::Collapsed);
+        SetMissionPanelMode(false);
+    }
+    if (S.bAwaitingDestination && !bMissionChoosing)
+    {
+        SetMissionPanelMode(true);
+        RefreshMissionPanel(0);
+        MissionPanel->SetVisibility(ESlateVisibility::Visible);
+    }
+    else if (!S.bAwaitingDestination && bMissionChoosing)
+    {
+        SetMissionPanelMode(false);
         MissionPanel->SetVisibility(ESlateVisibility::Collapsed);
     }
     ShowCaption(S.Title, Body, S.bPiloted ? TEXT("Esc -> menu     N: hand the docking to the autopilot     ABORT button ends it")
@@ -1057,6 +1074,7 @@ void UAstroHUDWidget::OnMissionButtonClicked()
     if (UAstroMissionSubsystem* Active = UAstroMissionSubsystem::Get(this); Active && Active->GetStatus().bActive)
     {
         Active->Abort();
+        MissionPanel->SetVisibility(ESlateVisibility::Collapsed);
         return;
     }
     const bool bOpen = MissionPanel->GetVisibility() != ESlateVisibility::Collapsed;
@@ -1073,6 +1091,19 @@ void UAstroHUDWidget::OnMissionButtonClicked()
     MissionPanel->SetVisibility(bOpen ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 }
 
+void UAstroHUDWidget::SetMissionPanelMode(bool bChoosing)
+{
+    // Before launch: only how you fly it. In Earth orbit, docked: where to go.
+    bMissionChoosing = bChoosing;
+    MissionHeadText->SetText(FText::FromString(bChoosing ? TEXT("Choose a destination") : TEXT("Launch to Earth orbit")));
+    MissionInfoText->SetText(FText::FromString(bChoosing
+        ? TEXT("You are aboard Odyssey in Earth orbit.\nPick where to go, then engage the main engines.")
+        : TEXT("Rocket from the pad to orbit, dock with the ring ship Odyssey.\nYou choose the destination once you are in orbit.")));
+    MissionGoText->SetText(FText::FromString(bChoosing ? TEXT("  ENGAGE  ") : TEXT("  LAUNCH  ")));
+    MissionDestRow->SetVisibility(bChoosing ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+    MissionModeButton->SetVisibility(bChoosing ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+}
+
 void UAstroHUDWidget::OnMissionPrevClicked() { RefreshMissionPanel(-1); }
 void UAstroHUDWidget::OnMissionNextClicked() { RefreshMissionPanel(+1); }
 
@@ -1085,7 +1116,15 @@ void UAstroHUDWidget::OnMissionModeClicked()
 void UAstroHUDWidget::OnMissionLaunchClicked()
 {
     MissionPanel->SetVisibility(ESlateVisibility::Collapsed);
-    OnMissionRequested.Broadcast(MissionDestination, bMissionPilot);
+    if (bMissionChoosing)
+    {
+        if (UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(this))
+        {
+            Mission->ChooseDestination(MissionDestination);
+        }
+        return;
+    }
+    OnMissionRequested.Broadcast(NAME_None, bMissionPilot);
 }
 
 void UAstroHUDWidget::RefreshMissionPanel(int32 Step)
@@ -1124,7 +1163,7 @@ void UAstroHUDWidget::RefreshMissionPanel(int32 Step)
     if (MissionDestText) { MissionDestText->SetText(FText::FromString(FString::Printf(TEXT("To:  %s"), *MissionDestination.ToString()))); }
     if (MissionModeText)
     {
-        MissionModeText->SetText(FText::FromString(bMissionPilot ? TEXT("  Mode:  YOU PILOT (ascent + docking)  ") : TEXT("  Mode:  Autopilot (watch)  ")));
+        MissionModeText->SetText(FText::FromString(bMissionPilot ? TEXT("  Mode:  YOU PILOT (in space: docking + flight)  ") : TEXT("  Mode:  Autopilot (watch)  ")));
     }
 }
 

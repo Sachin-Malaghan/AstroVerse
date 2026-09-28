@@ -88,7 +88,7 @@ void AAstroPlayerController::HandleUICommand(FName Command)
     }
     else if (Command == TEXT("Mission"))
     {
-        StartMission(SelectedBody);
+        StartMission(NAME_None); // the destination is chosen in Earth orbit
     }
 }
 
@@ -141,9 +141,9 @@ void AAstroPlayerController::FinishGoToSite()
 
 void AAstroPlayerController::StartMission(FName Destination, bool bPiloted)
 {
-    if (Destination.IsNone() || Destination == TEXT("Earth") || Destination == TEXT("Sun"))
+    if (Destination == TEXT("Earth") || Destination == TEXT("Sun"))
     {
-        Destination = TEXT("Mars"); // a sensible first mission
+        Destination = NAME_None; // chosen in orbit instead
     }
     if (UAstroTourSubsystem* Tour = UAstroTourSubsystem::Get(this); Tour && Tour->IsRunning())
     {

@@ -14,6 +14,10 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogAstroMission, Log, All);
 
+static TAutoConsoleVariable<int32> CVarMissionPilotAscent(
+    TEXT("astro.Mission.PilotAscent"), 0,
+    TEXT("Piloted missions: 0 = autopilot flies the ascent, you take over in orbit (default); 1 = you fly the ascent too"));
+
 namespace
 {
     // Ascent profile (mission s, altitude km, downrange km): a heavy launcher's gravity turn to
@@ -57,12 +61,12 @@ namespace
     }
 
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdMissionLaunch(
-        TEXT("astro.Mission.Launch"), TEXT("astro.Mission.Launch [Destination=Mars] [lat lon] - rocket launch, docking, and flight in the ring ship"),
+        TEXT("astro.Mission.Launch"), TEXT("astro.Mission.Launch [Destination|none] [lat lon] - rocket launch, docking, and flight in the ring ship (none: choose in orbit)"),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
         {
             if (UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(World))
             {
-                const FName Dest = Args.Num() > 0 ? FName(*Args[0]) : FName(TEXT("Mars"));
+                const FName Dest = Args.Num() > 0 && !Args[0].Equals(TEXT("none"), ESearchCase::IgnoreCase) ? FName(*Args[0]) : NAME_None;
                 if (Args.Num() >= 3)
                 {
                     Mission->Launch(Dest, FCString::Atod(*Args[1]), FCString::Atod(*Args[2]), TEXT("Custom site"));
@@ -75,12 +79,22 @@ namespace
         }));
 
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdMissionPilot(
-        TEXT("astro.Mission.Pilot"), TEXT("astro.Mission.Pilot [Destination=Mars] - you fly the ascent and the docking"),
+        TEXT("astro.Mission.Pilot"), TEXT("astro.Mission.Pilot [Destination] - autopilot to orbit, then you fly the docking (no destination: choose in orbit)"),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
         {
             if (UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(World))
             {
-                Mission->Launch(Args.Num() > 0 ? FName(*Args[0]) : FName(TEXT("Mars")), 13.7199, 80.2304, TEXT("Satish Dhawan Space Centre, Sriharikota"), true);
+                Mission->Launch(Args.Num() > 0 ? FName(*Args[0]) : NAME_None, 13.7199, 80.2304, TEXT("Satish Dhawan Space Centre, Sriharikota"), true);
+            }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdMissionGo(
+        TEXT("astro.Mission.Go"), TEXT("astro.Mission.Go <Body> - once docked in Earth orbit, set out for this body"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            if (UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(World); Mission && Args.Num() > 0)
+            {
+                Mission->ChooseDestination(FName(*Args[0]));
             }
         }));
 
@@ -131,8 +145,9 @@ bool UAstroMissionSubsystem::IsControllingCamera() const
 
 bool UAstroMissionSubsystem::IsPiloting() const
 {
-    return Status.bActive && bPiloted && (Status.Phase == EAstroMissionPhase::Countdown || Status.Phase == EAstroMissionPhase::Ascent
-        || Status.Phase == EAstroMissionPhase::Rendezvous || Status.Phase == EAstroMissionPhase::Departure);
+    const bool bAscent = Status.Phase == EAstroMissionPhase::Countdown || Status.Phase == EAstroMissionPhase::Ascent;
+    return Status.bActive && bPiloted && (bAscent ? bPilotAscent
+        : (Status.Phase == EAstroMissionPhase::Rendezvous || Status.Phase == EAstroMissionPhase::Departure));
 }
 
 void UAstroMissionSubsystem::SetPilotInput(const FVector& Move, const FVector2D& Look, bool bBoost)
@@ -316,11 +331,32 @@ void UAstroMissionSubsystem::StepPilotDocking(double RealDt)
         FMath::Max(Gap, 0.0), DockV.X, Lateral, DockR.Y, DockR.Z);
 }
 
+bool UAstroMissionSubsystem::ChooseDestination(FName Body)
+{
+    const UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
+    if (!Status.bActive || Status.Phase > EAstroMissionPhase::Docked || !Sim || Body == TEXT("Earth")
+        || Sim->FindBodyIndex(Body) == INDEX_NONE)
+    {
+        return false;
+    }
+    Destination = Body;
+    Status.Destination = Body;
+    Status.bAwaitingDestination = false;
+    Status.PilotText.Reset();
+    Status.Title = FString::Printf(TEXT("%s to %s  -  from %s"), bPiloted ? TEXT("Piloted mission") : TEXT("Mission"), *Body.ToString(), *LaunchSiteName);
+    if (Status.Phase == EAstroMissionPhase::Docked)
+    {
+        PhaseSeconds = FMath::Max(PhaseSeconds, DockedSeconds - 2.0); // a short beat, then main engines
+    }
+    SetEvent(FString::Printf(TEXT("Course set for %s"), *Body.ToString()));
+    return true;
+}
+
 bool UAstroMissionSubsystem::Launch(FName InDestination, double LatDeg, double LonDeg, const FString& SiteName, bool bInPiloted)
 {
     UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
     Earth = Sim && Sim->IsReady() ? Sim->FindBodyIndex(TEXT("Earth")) : INDEX_NONE;
-    if (Earth == INDEX_NONE || Sim->FindBodyIndex(InDestination) == INDEX_NONE)
+    if (Earth == INDEX_NONE || (!InDestination.IsNone() && Sim->FindBodyIndex(InDestination) == INDEX_NONE))
     {
         return false;
     }
@@ -370,6 +406,8 @@ bool UAstroMissionSubsystem::Launch(FName InDestination, double LatDeg, double L
     NextEvent = 0;
     bStageSeparated = bFairingSeparated = false;
     bPiloted = bInPiloted;
+    // By default the autopilot flies the ascent and you take over in orbit (astro.Mission.PilotAscent 1: fly it yourself).
+    bPilotAscent = bInPiloted && CVarMissionPilotAscent.GetValueOnGameThread() != 0;
     Status.bPiloted = bInPiloted;
     CosLat = FMath::Sqrt(FMath::Max(0.0, 1.0 - FMath::Square(SiteUp.Z)));
     PX = PH = PVh = 0.0;
@@ -384,9 +422,13 @@ bool UAstroMissionSubsystem::Launch(FName InDestination, double LatDeg, double L
     OrbitH = Profile[UE_ARRAY_COUNT(Profile) - 1].H * 1000.0;
     OrbitGround = OrbitGroundSpeed;
     OrbitT0 = SECO;
-    Status.Title = FString::Printf(TEXT("%s to %s  -  from %s"), bInPiloted ? TEXT("Piloted mission") : TEXT("Mission"), *InDestination.ToString(), *SiteName);
+    LaunchSiteName = SiteName;
+    Status.Destination = InDestination;
+    Status.Title = InDestination.IsNone()
+        ? FString::Printf(TEXT("%s to Earth orbit  -  from %s"), bInPiloted ? TEXT("Piloted launch") : TEXT("Launch"), *SiteName)
+        : FString::Printf(TEXT("%s to %s  -  from %s"), bInPiloted ? TEXT("Piloted mission") : TEXT("Mission"), *InDestination.ToString(), *SiteName);
     SetEvent(bInPiloted ? TEXT("Countdown - you have the controls at T-0") : TEXT("Countdown - all systems go"));
-    UE_LOG(LogAstroMission, Display, TEXT("Mission to %s from %.4f, %.4f"), *InDestination.ToString(), LatDeg, LonDeg);
+    UE_LOG(LogAstroMission, Display, TEXT("Mission to %s from %.4f, %.4f"), InDestination.IsNone() ? TEXT("Earth orbit (destination chosen there)") : *InDestination.ToString(), LatDeg, LonDeg);
     return true;
 }
 
@@ -506,7 +548,11 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
     case EAstroMissionPhase::Countdown:
         MissionTime = -CountdownSeconds + PhaseSeconds;
         Status.PhaseText = FString::Printf(TEXT("T-%d"), FMath::CeilToInt(-MissionTime));
-        if (bPiloted)
+        if (bPiloted && !bPilotAscent)
+        {
+            Status.PilotText = TEXT("Autopilot flies the launch. You take the controls once you are in orbit.");
+        }
+        if (bPilotAscent)
         {
             Status.PilotText = TEXT("You are the pilot.  At T-0 hold W to throttle up; once climbing, press D (or drag) to pitch over toward the horizon.");
         }
@@ -520,7 +566,7 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
     case EAstroMissionPhase::Ascent:
     {
         RealSinceLiftoff += DeltaTime;
-        if (bPiloted)
+        if (bPilotAscent)
         {
             StepPilotAscent(DeltaTime);
             Status.PhaseText = PStage == 1 ? TEXT("Ascent - first stage (you are flying)") : bPIgnited2 ? TEXT("Ascent - second stage (you are flying)") : TEXT("Staging");
@@ -549,11 +595,16 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
     case EAstroMissionPhase::Coast:
         MissionTime += DeltaTime * 3.0;
         Status.PhaseText = FString::Printf(TEXT("In orbit - %s ahead"), ShipName);
+        if (bPiloted && !bPilotAscent)
+        {
+            Status.PilotText = FString::Printf(TEXT("Autopilot has you in orbit. You take control for the docking with %s in a moment."), ShipName);
+        }
         if (PhaseSeconds >= CoastSeconds)
         {
             Status.Phase = EAstroMissionPhase::Rendezvous;
             PhaseSeconds = 0.0;
-            SetEvent(FString::Printf(TEXT("Rendezvous with %s"), ShipName));
+            SetEvent(bPiloted ? FString::Printf(TEXT("You have control - fly to %s's docking port"), ShipName)
+                              : FString::Printf(TEXT("Rendezvous with %s"), ShipName));
         }
         break;
     case EAstroMissionPhase::Rendezvous:
@@ -573,7 +624,13 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
     case EAstroMissionPhase::Docked:
         MissionTime += DeltaTime * 3.0;
         Status.PhaseText = FString::Printf(TEXT("Crew aboard %s"), ShipName);
-        if (PhaseSeconds >= DockedSeconds)
+        Status.bAwaitingDestination = Destination.IsNone() && PhaseSeconds >= 2.0;
+        if (Status.bAwaitingDestination)
+        {
+            Status.PhaseText = FString::Printf(TEXT("Crew aboard %s in Earth orbit - choose a destination"), ShipName);
+            Status.PilotText = TEXT("Where to? Pick a destination in the panel (bottom right) and press ENGAGE.");
+        }
+        if (PhaseSeconds >= DockedSeconds && !Destination.IsNone())
         {
             BeginDeparture();
             return;
@@ -612,7 +669,7 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
     // --- vehicles and camera (launch through docking), all in Earth's body-fixed frame.
     double Altitude = 0.0, Downrange = 0.0;
     const double T = FMath::Max(MissionTime, 0.0);
-    const bool bPilotFlight = bPiloted && (Status.Phase == EAstroMissionPhase::Countdown || Status.Phase == EAstroMissionPhase::Ascent || Status.Phase == EAstroMissionPhase::Failed);
+    const bool bPilotFlight = bPilotAscent && (Status.Phase == EAstroMissionPhase::Countdown || Status.Phase == EAstroMissionPhase::Ascent || Status.Phase == EAstroMissionPhase::Failed);
     FAstroVector3d Base, Ahead, Axis;
     if (bPilotFlight)
     {
@@ -702,7 +759,7 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
     Rocket->SetRocketTransform(ToEngine(Sim, CapsuleBase), RocketRot);
 
     // Staging: the spent first stage drops behind (the upper stage keeps accelerating away).
-    if ((bPiloted ? PStage >= 2 : MissionTime >= 160.0) && !bStageSeparated)
+    if ((bPilotAscent ? PStage >= 2 : MissionTime >= 160.0) && !bStageSeparated)
     {
         bStageSeparated = true;
         Rocket->SeparateStage1();
@@ -717,7 +774,7 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
         const FQuat Tumble = FQuat(Sim->SimToEngineDirection(BodyFixedDirToSim(Sim, Side)), FMath::DegreesToRadians(Dt * 4.0));
         Rocket->SetStage1Transform(ToEngine(Sim, Pos), Tumble * RocketRot);
     }
-    if ((bPiloted ? PH > 110000.0 : MissionTime >= 215.0) && !bFairingSeparated)
+    if ((bPilotAscent ? PH > 110000.0 : MissionTime >= 215.0) && !bFairingSeparated)
     {
         bFairingSeparated = true;
         Rocket->SeparateFairing();
@@ -733,7 +790,7 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
         Rocket->SetFairingTransform(ToEngine(Sim, Pos), Tumble * RocketRot);
     }
     float S1 = 0.0f, S2 = 0.0f;
-    if (bPiloted)
+    if (bPilotAscent)
     {
         const bool bBurning = Status.Phase == EAstroMissionPhase::Ascent;
         S1 = bBurning && PStage == 1 && PUsed1 < Stage1Burn ? static_cast<float>(PThrottle) : 0.0f;
