@@ -12,7 +12,7 @@ class UAstroHUDWidget;
 DECLARE_MULTICAST_DELEGATE_FourParams(FOnAstroUISiteRequest, double, double, double, const FString&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnAstroUICommand, FName);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnAstroUIBodyRequested, FName);
-DECLARE_MULTICAST_DELEGATE_TwoParams(FOnAstroUIMissionRequested, FName, bool);
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnAstroUIMissionRequested, FName /*Destination*/, bool /*bPilot*/, FName /*Vehicle*/);
 class UAstroPauseMenuWidget;
 enum class EAstroScaleDomain : uint8;
 

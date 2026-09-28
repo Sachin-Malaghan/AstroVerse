@@ -6,6 +6,7 @@
 #include "AstroUIFormat.h"
 #include "AstroSiteSubsystem.h"
 #include "AstroMissionSubsystem.h"
+#include "AstroVehicleData.h"
 #include "Physics/KeplerOrbit.h"
 #include "Rendering/DrawElements.h"
 #include "HAL/IConsoleManager.h"
@@ -242,6 +243,20 @@ void UAstroHUDWidget::Build()
         Box->AddChildToVerticalBox(DestRow)->SetPadding(FMargin(0, 0, 0, 6));
         MissionDestRow = DestRow;
 
+        // Launch vehicle
+        UHorizontalBox* VehicleRow = WidgetTree->ConstructWidget<UHorizontalBox>();
+        UTextBlock* VehicleArrow = nullptr;
+        UButton* VPrev = MakeButton(TEXT(" < "), VehicleArrow);
+        UButton* VNext = MakeButton(TEXT(" > "), VehicleArrow);
+        VPrev->OnClicked.AddDynamic(this, &UAstroHUDWidget::OnMissionVehiclePrevClicked);
+        VNext->OnClicked.AddDynamic(this, &UAstroHUDWidget::OnMissionVehicleNextClicked);
+        MissionVehicleText = MakeText(15);
+        VehicleRow->AddChildToHorizontalBox(VPrev);
+        VehicleRow->AddChildToHorizontalBox(MissionVehicleText)->SetPadding(FMargin(10, 3, 10, 0));
+        VehicleRow->AddChildToHorizontalBox(VNext);
+        Box->AddChildToVerticalBox(VehicleRow)->SetPadding(FMargin(0, 0, 0, 6));
+        MissionVehicleRow = VehicleRow;
+
         UTextBlock* ModeLabel = nullptr;
         UButton* Mode = MakeButton(TEXT(""), ModeLabel);
         MissionModeText = ModeLabel;
@@ -260,6 +275,7 @@ void UAstroHUDWidget::Build()
         Place(Root, MissionPanel, FAnchors(1.0f, 1.0f), FVector2D(1.0f, 1.0f), FVector2D(-16, -60));
         MissionPanel->SetVisibility(ESlateVisibility::Collapsed);
         SetMissionPanelMode(false);
+        StepVehicle(0);
         RefreshMissionPanel(0);
     }
 
@@ -1102,6 +1118,25 @@ void UAstroHUDWidget::SetMissionPanelMode(bool bChoosing)
     MissionGoText->SetText(FText::FromString(bChoosing ? TEXT("  ENGAGE  ") : TEXT("  LAUNCH  ")));
     MissionDestRow->SetVisibility(bChoosing ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
     MissionModeButton->SetVisibility(bChoosing ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    MissionVehicleRow->SetVisibility(bChoosing ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+}
+
+void UAstroHUDWidget::OnMissionVehiclePrevClicked() { StepVehicle(-1); }
+void UAstroHUDWidget::OnMissionVehicleNextClicked() { StepVehicle(+1); }
+
+void UAstroHUDWidget::StepVehicle(int32 Step)
+{
+    const TArray<FName> List = FAstroVehicleCatalog::List();
+    if (List.Num() == 0)
+    {
+        MissionVehicleText->SetText(FText::FromString(TEXT("Rocket:  (no vehicle data)")));
+        return;
+    }
+    const int32 At = FMath::Max(0, List.IndexOfByKey(MissionVehicle));
+    MissionVehicle = List[(At + Step + List.Num()) % List.Num()];
+    const FAstroVehicleRow* Row = FAstroVehicleCatalog::Find(MissionVehicle);
+    MissionVehicleText->SetText(FText::FromString(FString::Printf(TEXT("Rocket:  %s"), Row ? *Row->DisplayName : *MissionVehicle.ToString())));
+    MissionVehicleText->SetToolTipText(FText::FromString(Row ? Row->Description + TEXT("\nPad: ") + Row->PadName : FString()));
 }
 
 void UAstroHUDWidget::OnMissionPrevClicked() { RefreshMissionPanel(-1); }
@@ -1124,7 +1159,7 @@ void UAstroHUDWidget::OnMissionLaunchClicked()
         }
         return;
     }
-    OnMissionRequested.Broadcast(NAME_None, bMissionPilot);
+    OnMissionRequested.Broadcast(NAME_None, bMissionPilot, MissionVehicle);
 }
 
 void UAstroHUDWidget::RefreshMissionPanel(int32 Step)

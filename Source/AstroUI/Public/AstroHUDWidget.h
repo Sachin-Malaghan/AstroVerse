@@ -42,7 +42,7 @@ public:
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnAstroBodyRequested, FName);
 // Mission panel: destination and whether you pilot it.
-DECLARE_MULTICAST_DELEGATE_TwoParams(FOnAstroMissionRequested, FName, bool);
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnAstroMissionRequested, FName /*Destination*/, bool /*bPilot*/, FName /*Vehicle*/);
 
 UCLASS()
 class ASTROUI_API UAstroHUDWidget : public UUserWidget
@@ -109,6 +109,12 @@ private:
     UFUNCTION() void OnMissionPrevClicked();
     UFUNCTION() void OnMissionNextClicked();
     UFUNCTION() void OnMissionModeClicked();
+    UFUNCTION() void OnMissionVehiclePrevClicked();
+    UFUNCTION() void OnMissionVehicleNextClicked();
+    void StepVehicle(int32 Step);
+    UPROPERTY() TObjectPtr<UTextBlock> MissionVehicleText;
+    UPROPERTY() TObjectPtr<UWidget> MissionVehicleRow;
+    FName MissionVehicle;
     UFUNCTION() void OnMissionLaunchClicked();
     void RefreshMissionPanel(int32 Step);
     UPROPERTY() TObjectPtr<UBorder> MissionPanel;

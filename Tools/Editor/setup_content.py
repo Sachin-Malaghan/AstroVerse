@@ -12,6 +12,7 @@ Creates:
   /Game/Rendering/Materials/M_*                      (masters; HLSL lives in Tools/Editor/shaders)
   /Game/Rendering/Materials/Bodies/MI_*              (one per body)
   /Game/Maps/L_SolarSystem
+  /Game/Vehicles/...                                 (import_vehicles.py: launch vehicles and their data tables)
 See CLAUDE.md Phase 4 and Phase 6.
 """
 import os
@@ -693,4 +694,6 @@ build_galaxy_materials()
 build_mission_materials()
 build_instances(surface, sun, rings, star_field)
 build_level()
+# Launch vehicles (meshes from build_vehicles.py + their data tables).
+exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "import_vehicles.py"), encoding="utf-8").read())
 log("Done")

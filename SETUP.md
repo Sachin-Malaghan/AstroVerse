@@ -54,12 +54,22 @@ python Tools\Data\fetch_dems.py
 |---|---|
 | `Binaries/`, `Intermediate/`, `DerivedDataCache/`, `Saved/`, `*.sln` | the build (step 2.3-2.4); shaders compile on first launch (the first run is slow) |
 | `Content/Bodies/Terrain/DEM/` (real elevation, ~900 MB) | `python Tools/Data/fetch_dems.py` |
+| `SourceArt/Models/NASA/` (raw NASA 3D models, ~49 MB download) | `python Tools/Data/fetch_models.py` - only needed to rebuild the launch vehicles; the processed vehicles and their Unreal assets are committed |
 
 The generated Unreal assets (data tables, materials, the level) *are* committed (LFS). If you change the CSV data tables or `Tools/Editor/shaders/*.hlsl`, rebuild them:
 
 ```
 "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" "<repo>\AstroVerse.uproject" -run=pythonscript -script="<repo>\Tools\Editor\setup_content.py" -unattended -nosplash
 ```
+
+To rebuild the launch vehicles (only after changing `Tools/Editor/build_vehicles.py` or the source models; needs Blender 5.x):
+
+```
+python Tools/Data/fetch_models.py
+"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" -b --python Tools/Editor/build_vehicles.py
+```
+
+then run `setup_content.py` as above with `ASTRO_REIMPORT_VEHICLES=1` set.
 
 ## 5. Notes
 

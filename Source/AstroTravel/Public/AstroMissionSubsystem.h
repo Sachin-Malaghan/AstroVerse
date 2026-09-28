@@ -44,6 +44,8 @@ struct FAstroMissionStatus
     bool bPiloted = false;
     FString PilotText;   // telemetry + controls while you fly it
     bool bAwaitingDestination = false; // docked in Earth orbit, waiting for ChooseDestination
+    FName Vehicle;
+    FString VehicleName;
     FName Destination;   // None until chosen in orbit
 };
 
@@ -62,7 +64,8 @@ public:
 
     // Launch from (geodetic lat, east lon) on Earth to Destination. SiteName is for the HUD.
     // bPiloted: the autopilot flies the ascent, you fly the docking (RCS) and the cruise; astro.Mission.PilotAscent 1 hands you the ascent too.
-    bool Launch(FName Destination, double LatDeg, double LonDeg, const FString& SiteName, bool bPiloted = false);
+    // Vehicle: a row of DT_Vehicles (None = astro.Mission.Vehicle, default HLVM3).
+    bool Launch(FName Destination, double LatDeg, double LonDeg, const FString& SiteName, bool bPiloted = false, FName Vehicle = NAME_None);
 
     // Pilot controls, fed by the pawn every frame: Move = (forward/back, right/left, up/down),
     // Look = mouse drag, bBoost = Shift.
@@ -117,10 +120,25 @@ private:
     double EventTimer = 0.0;
     double RealSinceLiftoff = 0.0;
     bool bStageSeparated = false;
-    bool bFairingSeparated = false;
     int32 NextEvent = 0;
-    double SeparationTime = 0.0, FairingTime = 0.0;
-    FAstroVector3d SeparationBF, SeparationVelBF, FairingBF, FairingVelBF;
+
+    // The launch vehicle (AstroVehicleData.h), resolved at launch.
+    FName VehicleId;
+    double VehicleHeight = 60.0;
+    double VehicleSECO = 540.0;   // orbit insertion (s)
+    double ProfileScale = 1.0;    // ascent profile time stretch (VehicleSECO / the profile's 540 s)
+    double DeckHeight = 7.0;      // vehicle base above the ground on its pad
+    FVector DockPointM = FVector(0, 0, 60);
+    FVector DockDirection = FVector(0, 0, 1);
+    FVector CraftCentreM = FVector(0, 0, 50);
+    TArray<TPair<double, FString>> Events;
+    struct FGroupSeparation
+    {
+        double Time = 0.0;
+        FAstroVector3d Base, Velocity, Push;
+        FQuat Rotation = FQuat::Identity;
+    };
+    TArray<FGroupSeparation> GroupSep;
 
     // Orbit reached (autopilot: the profile's SECO; piloted: wherever you made orbit).
     double OrbitX0 = 0.0, OrbitH = 0.0, OrbitGround = 0.0, OrbitT0 = 0.0;

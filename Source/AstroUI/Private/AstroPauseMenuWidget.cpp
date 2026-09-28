@@ -117,6 +117,8 @@ void UAstroPauseMenuWidget::Build()
     CreditsText->SetAutoWrapText(true);
     CreditsText->SetText(FText::FromString(TEXT(
         "Planet textures by Solar System Scope (solarsystemscope.com), CC BY 4.0\n"
+        "3D models: Saturn V, Space Shuttle, SLS Block 1, Mobile Launcher - NASA 3D Resources (github.com/nasa/NASA-3D-Resources)\n"
+        "HLVM3 / Gaganyaan: AstroVerse model from published ISRO dimensions (approximate)\n"
         "Planetary orbital elements: JPL, Standish, \"Keplerian Elements for Approximate Positions of the Major Planets\"\n"
         "Gravitational parameters: JPL DE440     Rotation models: IAU WGCCRE\n"
         "Atmosphere coefficients: Bruneton, \"Precomputed Atmospheric Scattering\" (2017)\n"

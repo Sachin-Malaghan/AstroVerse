@@ -38,7 +38,8 @@ public:
     void ClearSite();
 
     // Crewed mission: rocket from the active Earth site (else Sriharikota) to Destination.
-    void StartMission(FName Destination, bool bPiloted = false);
+    // Vehicle None = astro.Mission.Vehicle. The pad is the active Earth site, else the vehicle's own.
+    void StartMission(FName Destination, bool bPiloted = false, FName Vehicle = NAME_None);
 
     // Body nearest the view center within MaxAngleDeg (or covering the center).
     UFUNCTION(BlueprintPure, Category = "Astro|Selection")

@@ -20,6 +20,7 @@
 #include "AstroTourSubsystem.h"
 #include "AstroSiteSubsystem.h"
 #include "AstroMissionSubsystem.h"
+#include "AstroVehicleData.h"
 #include "AstroScaleDomainSubsystem.h"
 #include "AstroSimulationSubsystem.h"
 
@@ -59,7 +60,7 @@ void AAstroPlayerController::BeginPlay()
             GoToSite(TEXT("Earth"), Lat, Lon, Zone, Name);
         });
         UI->OnCommand.AddUObject(this, &AAstroPlayerController::HandleUICommand);
-        UI->OnMissionRequested.AddWeakLambda(this, [this](FName Body, bool bPilot) { StartMission(Body, bPilot); });
+        UI->OnMissionRequested.AddWeakLambda(this, [this](FName Body, bool bPilot, FName Vehicle) { StartMission(Body, bPilot, Vehicle); });
         UI->OnBodyRequested.AddWeakLambda(this, [this](FName Body)
         {
             SelectBody(Body);
@@ -139,7 +140,7 @@ void AAstroPlayerController::FinishGoToSite()
     }
 }
 
-void AAstroPlayerController::StartMission(FName Destination, bool bPiloted)
+void AAstroPlayerController::StartMission(FName Destination, bool bPiloted, FName Vehicle)
 {
     if (Destination == TEXT("Earth") || Destination == TEXT("Sun"))
     {
@@ -155,6 +156,16 @@ void AAstroPlayerController::StartMission(FName Destination, bool bPiloted)
     }
     double Lat = 13.7199, Lon = 80.2304;
     FString Name = TEXT("Satish Dhawan Space Centre, Sriharikota");
+    if (Vehicle.IsNone())
+    {
+        Vehicle = FName(*IConsoleManager::Get().FindConsoleVariable(TEXT("astro.Mission.Vehicle"))->GetString());
+    }
+    if (const FAstroVehicleRow* Row = FAstroVehicleCatalog::Find(Vehicle))
+    {
+        Lat = Row->PadLatDeg;
+        Lon = Row->PadLonDeg;
+        Name = Row->PadName;
+    }
     if (const UAstroSiteSubsystem* Site = UAstroSiteSubsystem::Get(this); Site && Site->HasSite() && Site->GetReport().Body == TEXT("Earth"))
     {
         Lat = Site->GetReport().LatDeg;
@@ -164,7 +175,7 @@ void AAstroPlayerController::StartMission(FName Destination, bool bPiloted)
     }
     if (UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(this))
     {
-        Mission->Launch(Destination, Lat, Lon, Name, bPiloted);
+        Mission->Launch(Destination, Lat, Lon, Name, bPiloted, Vehicle);
     }
 }
 

@@ -22,3 +22,5 @@ Config/UserEngine.ini
 .DS_Store
 Thumbs.db
 Content/Bodies/Terrain/DEM/
+# Raw NASA model downloads (Tools/Data/fetch_models.py); the processed vehicles are committed.
+SourceArt/Models/NASA/

@@ -2,6 +2,7 @@
 #include "AstroMissionSubsystem.h"
 #include "AstroGeodesy.h"
 #include "AstroMissionActors.h"
+#include "AstroVehicleData.h"
 #include "AstroSimulationSubsystem.h"
 #include "AstroTravelSubsystem.h"
 #include "BodyTerrain.h"
@@ -13,6 +14,10 @@
 #include "TimeController.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAstroMission, Log, All);
+
+static TAutoConsoleVariable<FString> CVarMissionVehicle(
+    TEXT("astro.Mission.Vehicle"), TEXT("HLVM3"),
+    TEXT("Launch vehicle for console launches: HLVM3, SaturnV, Shuttle, SLS (rows of DT_Vehicles)"));
 
 static TAutoConsoleVariable<int32> CVarMissionPilotAscent(
     TEXT("astro.Mission.PilotAscent"), 0,
@@ -26,10 +31,9 @@ namespace
     const FAscentKey Profile[] = {
         { 0, 0, 0 }, { 20, 1.2, 0.05 }, { 60, 11, 1.5 }, { 100, 35, 10 }, { 160, 68, 55 },
         { 220, 110, 170 }, { 300, 150, 420 }, { 420, 185, 950 }, { 540, 200, 1800 } };
-    constexpr double SECO = 540.0;
+    constexpr double SECO = 540.0; // the profile's own orbit insertion; vehicles stretch it (ProfileScale)
     constexpr double OrbitGroundSpeed = 7100.0; // m/s after SECO in Earth's rotating frame
     constexpr double CountdownSeconds = 10.0;
-    constexpr double MountHeight = 7.0; // rocket base above the pad deck (launch mount)
     constexpr double CoastSeconds = 5.0;
     constexpr double RendezvousSeconds = 16.0;
     constexpr double DockedSeconds = 6.0;
@@ -43,8 +47,8 @@ namespace
         return 0.5 * ((2.0 * P1) + (-P0 + P2) * U + (2.0 * P0 - 5.0 * P1 + 4.0 * P2 - P3) * U * U + (-P0 + 3.0 * P1 - 3.0 * P2 + P3) * U * U * U);
     }
 
-    struct FEvent { double T; const TCHAR* Text; };
-    const FEvent Events[] = {
+    struct FMissionEvent { double T; const TCHAR* Text; };
+    const FMissionEvent DefaultEvents[] = {
         { 0.0, TEXT("Liftoff!") },
         { 72.0, TEXT("Max-Q: maximum aerodynamic pressure") },
         { 158.0, TEXT("Main engine cutoff") },
@@ -61,7 +65,7 @@ namespace
     }
 
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdMissionLaunch(
-        TEXT("astro.Mission.Launch"), TEXT("astro.Mission.Launch [Destination|none] [lat lon] - rocket launch, docking, and flight in the ring ship (none: choose in orbit)"),
+        TEXT("astro.Mission.Launch"), TEXT("astro.Mission.Launch [Destination|none] [Vehicle | lat lon] - rocket launch, docking, and flight in the ring ship (none: choose in orbit)"),
         FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
         {
             if (UAstroMissionSubsystem* Mission = UAstroMissionSubsystem::Get(World))
@@ -73,7 +77,11 @@ namespace
                 }
                 else
                 {
-                    Mission->Launch(Dest, 13.7199, 80.2304, TEXT("Satish Dhawan Space Centre, Sriharikota"));
+                    // From the vehicle's own pad (second argument, else astro.Mission.Vehicle).
+                    const FName Vehicle = Args.Num() == 2 ? FName(*Args[1]) : FName(*CVarMissionVehicle.GetValueOnGameThread());
+                    const FAstroVehicleRow* Row = FAstroVehicleCatalog::Find(Vehicle);
+                    Mission->Launch(Dest, Row ? Row->PadLatDeg : 13.7199, Row ? Row->PadLonDeg : 80.2304,
+                        Row ? Row->PadName : FString(TEXT("Satish Dhawan Space Centre, Sriharikota")), false, Vehicle);
                 }
             }
         }));
@@ -168,7 +176,7 @@ void UAstroMissionSubsystem::Fail(const FString& Why)
 FAstroVector3d UAstroMissionSubsystem::PointBF(double DownrangeM, double AltitudeM) const
 {
     const double Theta = DownrangeM / GroundRadius;
-    return (SiteUp * FMath::Cos(Theta) + SiteEast * FMath::Sin(Theta)) * (GroundRadius + MountHeight + AltitudeM);
+    return (SiteUp * FMath::Cos(Theta) + SiteEast * FMath::Sin(Theta)) * (GroundRadius + DeckHeight + AltitudeM);
 }
 
 void UAstroMissionSubsystem::StepPilotAscent(double RealDt)
@@ -343,7 +351,7 @@ bool UAstroMissionSubsystem::ChooseDestination(FName Body)
     Status.Destination = Body;
     Status.bAwaitingDestination = false;
     Status.PilotText.Reset();
-    Status.Title = FString::Printf(TEXT("%s to %s  -  from %s"), bPiloted ? TEXT("Piloted mission") : TEXT("Mission"), *Body.ToString(), *LaunchSiteName);
+    Status.Title = FString::Printf(TEXT("%s  -  %s to %s from %s"), *Status.VehicleName, bPiloted ? TEXT("piloted mission") : TEXT("mission"), *Body.ToString(), *LaunchSiteName);
     if (Status.Phase == EAstroMissionPhase::Docked)
     {
         PhaseSeconds = FMath::Max(PhaseSeconds, DockedSeconds - 2.0); // a short beat, then main engines
@@ -352,8 +360,15 @@ bool UAstroMissionSubsystem::ChooseDestination(FName Body)
     return true;
 }
 
-bool UAstroMissionSubsystem::Launch(FName InDestination, double LatDeg, double LonDeg, const FString& SiteName, bool bInPiloted)
+bool UAstroMissionSubsystem::Launch(FName InDestination, double LatDeg, double LonDeg, const FString& SiteName, bool bInPiloted, FName InVehicle)
 {
+    const FName VehicleRowName = InVehicle.IsNone() ? FName(*CVarMissionVehicle.GetValueOnGameThread()) : InVehicle;
+    const FAstroVehicleRow* VehicleRow = FAstroVehicleCatalog::Find(VehicleRowName);
+    if (!VehicleRow)
+    {
+        UE_LOG(LogAstroMission, Warning, TEXT("No launch vehicle %s in DT_Vehicles"), *VehicleRowName.ToString());
+        return false;
+    }
     UAstroSimulationSubsystem* Sim = UAstroSimulationSubsystem::Get(this);
     Earth = Sim && Sim->IsReady() ? Sim->FindBodyIndex(TEXT("Earth")) : INDEX_NONE;
     if (Earth == INDEX_NONE || (!InDestination.IsNone() && Sim->FindBodyIndex(InDestination) == INDEX_NONE))
@@ -389,9 +404,37 @@ bool UAstroMissionSubsystem::Launch(FName InDestination, double LatDeg, double L
     }
 
     FActorSpawnParameters Params;
-    Params.Name = TEXT("AstroMissionRocket");
+    // Unique names: an aborted mission's actors keep theirs until garbage collection.
+    Params.Name = MakeUniqueObjectName(GetWorld()->GetCurrentLevel(), AAstroRocketActor::StaticClass(), TEXT("AstroMissionRocket"));
     Rocket = GetWorld()->SpawnActor<AAstroRocketActor>(Params);
-    Params.Name = TEXT("AstroMissionShip");
+    if (!Rocket.IsValid() || !Rocket->BuildVehicle(VehicleRowName))
+    {
+        UE_LOG(LogAstroMission, Warning, TEXT("Launch vehicle %s has no parts (run setup_content.py)"), *VehicleRowName.ToString());
+        Abort();
+        return false;
+    }
+    VehicleId = VehicleRowName;
+    VehicleHeight = VehicleRow->HeightM;
+    VehicleSECO = VehicleRow->OrbitSeconds;
+    ProfileScale = VehicleSECO / SECO;
+    DeckHeight = VehicleRow->PadDeckHeightM;
+    DockPointM = VehicleRow->DockPointM;
+    DockDirection = VehicleRow->DockDirection.IsNearlyZero() ? FVector::ZAxisVector : VehicleRow->DockDirection;
+    CraftCentreM = Rocket->GetCraftCentreM();
+    GroupSep.Reset();
+    Events.Reset();
+    for (const FAstroVehicleEventRow* E : FAstroVehicleCatalog::Events(VehicleRowName))
+    {
+        Events.Emplace(E->TimeS, E->Text);
+    }
+    if (Events.Num() == 0)
+    {
+        for (const FMissionEvent& E : DefaultEvents)
+        {
+            Events.Emplace(E.T * ProfileScale, E.Text);
+        }
+    }
+    Params.Name = MakeUniqueObjectName(GetWorld()->GetCurrentLevel(), AAstroRingShipActor::StaticClass(), TEXT("AstroMissionShip"));
     Ship = GetWorld()->SpawnActor<AAstroRingShipActor>(Params);
     Ship->SetActorHiddenInGame(true);
 
@@ -404,14 +447,16 @@ bool UAstroMissionSubsystem::Launch(FName InDestination, double LatDeg, double L
     MissionTime = -CountdownSeconds;
     RealSinceLiftoff = 0.0;
     NextEvent = 0;
-    bStageSeparated = bFairingSeparated = false;
+    bStageSeparated = false;
     bPiloted = bInPiloted;
     // By default the autopilot flies the ascent and you take over in orbit (astro.Mission.PilotAscent 1: fly it yourself).
     bPilotAscent = bInPiloted && CVarMissionPilotAscent.GetValueOnGameThread() != 0;
     Status.bPiloted = bInPiloted;
+    Status.Vehicle = VehicleRowName;
+    Status.VehicleName = VehicleRow->DisplayName;
     CosLat = FMath::Sqrt(FMath::Max(0.0, 1.0 - FMath::Square(SiteUp.Z)));
     PX = PH = PVh = 0.0;
-    PVx = EarthOmega * (GroundRadius + MountHeight) * CosLat; // Earth's spin is free speed
+    PVx = EarthOmega * (GroundRadius + DeckHeight) * CosLat; // Earth's spin is free speed
     PThrottle = 0.0;
     PPitch = 0.0;
     PStage = 1;
@@ -421,12 +466,12 @@ bool UAstroMissionSubsystem::Launch(FName InDestination, double LatDeg, double L
     OrbitX0 = Profile[UE_ARRAY_COUNT(Profile) - 1].X * 1000.0;
     OrbitH = Profile[UE_ARRAY_COUNT(Profile) - 1].H * 1000.0;
     OrbitGround = OrbitGroundSpeed;
-    OrbitT0 = SECO;
+    OrbitT0 = VehicleSECO;
     LaunchSiteName = SiteName;
     Status.Destination = InDestination;
     Status.Title = InDestination.IsNone()
-        ? FString::Printf(TEXT("%s to Earth orbit  -  from %s"), bInPiloted ? TEXT("Piloted launch") : TEXT("Launch"), *SiteName)
-        : FString::Printf(TEXT("%s to %s  -  from %s"), bInPiloted ? TEXT("Piloted mission") : TEXT("Mission"), *InDestination.ToString(), *SiteName);
+        ? FString::Printf(TEXT("%s  -  %s to Earth orbit from %s"), *VehicleRow->DisplayName, bInPiloted ? TEXT("piloted launch") : TEXT("launch"), *SiteName)
+        : FString::Printf(TEXT("%s  -  %s to %s from %s"), *VehicleRow->DisplayName, bInPiloted ? TEXT("piloted mission") : TEXT("mission"), *InDestination.ToString(), *SiteName);
     SetEvent(bInPiloted ? TEXT("Countdown - you have the controls at T-0") : TEXT("Countdown - all systems go"));
     UE_LOG(LogAstroMission, Display, TEXT("Mission to %s from %.4f, %.4f"), InDestination.IsNone() ? TEXT("Earth orbit (destination chosen there)") : *InDestination.ToString(), LatDeg, LonDeg);
     return true;
@@ -466,22 +511,36 @@ FAstroVector3d UAstroMissionSubsystem::TrajectoryBF(double T, double* OutAltitud
     }
     else
     {
+        // The profile is one heavy launcher's; each vehicle stretches it to its own insertion time.
+        const double TP = T / ProfileScale;
         const int32 N = UE_ARRAY_COUNT(Profile);
         int32 i = 0;
-        while (i < N - 2 && Profile[i + 1].T < T) { ++i; }
+        while (i < N - 2 && Profile[i + 1].T < TP) { ++i; }
         const FAscentKey& A = Profile[FMath::Max(i - 1, 0)];
         const FAscentKey& B = Profile[i];
         const FAscentKey& C = Profile[i + 1];
         const FAscentKey& D = Profile[FMath::Min(i + 2, N - 1)];
-        const double U = (T - B.T) / (C.T - B.T);
-        H = FMath::Max(0.0, CatmullRom(A.H, B.H, C.H, D.H, U)) * 1000.0;
-        X = FMath::Max(0.0, CatmullRom(A.X, B.X, C.X, D.X, U)) * 1000.0;
+        const double U = (TP - B.T) / (C.T - B.T);
+        if (i == 0)
+        {
+            // Off the pad: constant acceleration (the spline would dip below the ground here).
+            H = B.H + (C.H - B.H) * U * U;
+            X = B.X + (C.X - B.X) * U * U;
+        }
+        else
+        {
+            // Kept between its keys, so the climb never reverses.
+            H = FMath::Clamp(CatmullRom(A.H, B.H, C.H, D.H, U), FMath::Min(B.H, C.H), FMath::Max(B.H, C.H));
+            X = FMath::Clamp(CatmullRom(A.X, B.X, C.X, D.X, U), FMath::Min(B.X, C.X), FMath::Max(B.X, C.X));
+        }
+        H *= 1000.0;
+        X *= 1000.0;
     }
     if (OutAltitude) { *OutAltitude = H; }
     if (OutDownrange) { *OutDownrange = X; }
     // Downrange along the great circle heading east from the pad.
     const double Theta = X / GroundRadius;
-    return (SiteUp * FMath::Cos(Theta) + SiteEast * FMath::Sin(Theta)) * (GroundRadius + MountHeight + H);
+    return (SiteUp * FMath::Cos(Theta) + SiteEast * FMath::Sin(Theta)) * (GroundRadius + DeckHeight + H);
 }
 
 FAstroVector3d UAstroMissionSubsystem::BodyFixedToSim(const UAstroSimulationSubsystem* Sim, const FAstroVector3d& BF) const
@@ -542,6 +601,12 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
     PhaseSeconds += DeltaTime;
     EventTimer -= DeltaTime;
     const double White = ExposureWhite(Sim);
+    while (Status.Phase >= EAstroMissionPhase::Ascent && Status.Phase <= EAstroMissionPhase::Docked
+        && NextEvent < Events.Num() && MissionTime >= Events[NextEvent].Key)
+    {
+        SetEvent(Events[NextEvent].Value);
+        ++NextEvent;
+    }
 
     switch (Status.Phase)
     {
@@ -578,14 +643,10 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
         }
         // 1x for the liftoff, then ramp to ~9x so the climb to orbit takes about a minute.
         const double Rate = 1.0 + 8.0 * FMath::SmoothStep(10.0, 18.0, RealSinceLiftoff);
-        MissionTime = FMath::Min(MissionTime + DeltaTime * Rate, SECO);
-        while (NextEvent < static_cast<int32>(UE_ARRAY_COUNT(Events)) && MissionTime >= Events[NextEvent].T)
-        {
-            SetEvent(Events[NextEvent].Text);
-            ++NextEvent;
-        }
-        Status.PhaseText = MissionTime < 158.0 ? TEXT("Ascent - first stage") : MissionTime < 165.0 ? TEXT("Staging") : TEXT("Ascent - second stage");
-        if (MissionTime >= SECO)
+        MissionTime = FMath::Min(MissionTime + DeltaTime * Rate * ProfileScale, VehicleSECO);
+        const double FirstSep = Rocket.IsValid() ? Rocket->GetFirstSeparation() : -1.0;
+        Status.PhaseText = FirstSep < 0.0 || MissionTime < FirstSep ? TEXT("Ascent - first stage") : TEXT("Ascent - upper stage");
+        if (MissionTime >= VehicleSECO)
         {
             Status.Phase = EAstroMissionPhase::Coast;
             PhaseSeconds = 0.0;
@@ -697,14 +758,38 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
     Status.DownrangeKm = Downrange / 1000.0;
     // Inertial speed: over-the-ground speed plus Earth's rotation at the site.
     const double Ground = (Ahead - Base).Length();
-    Status.SpeedKmS = (Ground + 465.1 * FMath::Sqrt(1.0 - FMath::Square(SiteUp.Z)) * FMath::SmoothStep(0.0, SECO, T)) / 1000.0;
+    Status.SpeedKmS = (Ground + 465.1 * FMath::Sqrt(1.0 - FMath::Square(SiteUp.Z)) * FMath::SmoothStep(0.0, VehicleSECO, T)) / 1000.0;
     if (bPilotFlight)
     {
         Status.SpeedKmS = FMath::Sqrt(PVh * PVh + PVx * PVx) / 1000.0;
     }
 
+    // Vehicle frame in body-fixed coordinates: X = Side (EngineRotation's hint), Y = Axis x Side
+    // with the engine's handedness, Z = Axis.
+    const FQuat RocketRot = EngineRotation(Sim, Axis, Side, true);
+    FAstroVector3d SideY = Axis.Cross(Side);
+    if (FVector::DotProduct(Sim->SimToEngineDirection(BodyFixedDirToSim(Sim, SideY)), RocketRot.GetAxisY()) < 0.0)
+    {
+        SideY = SideY * -1.0;
+    }
+    auto LocalToBF = [&](const FVector& V) { return Side * V.X + SideY * V.Y + Axis * V.Z; };
+
+    // Docking attitude: during the coast the craft turns its docking port toward the ship, about
+    // its own centre (nothing to do for a capsule on the nose; the Shuttle orbiter turns its bay).
+    double TurnAlpha = 0.0;
+    if (Status.Phase == EAstroMissionPhase::Coast)
+    {
+        TurnAlpha = FMath::SmoothStep(0.0, CoastSeconds, PhaseSeconds);
+    }
+    else if (Status.Phase >= EAstroMissionPhase::Rendezvous)
+    {
+        TurnAlpha = 1.0;
+    }
+    const FQuat Turn = FQuat::Slerp(FQuat::Identity, FQuat::FindBetweenNormals(DockDirection.GetSafeNormal(), FVector::ZAxisVector), TurnAlpha);
+    const FAstroVector3d VehicleBase = Base + LocalToBF(CraftCentreM) - LocalToBF(Turn.RotateVector(CraftCentreM));
+    const FAstroVector3d DockBF = LocalToBF(Turn.RotateVector(DockPointM));
+
     // Ring ship waiting ahead in the same orbit; closes in during the rendezvous.
-    const double Nose = 62.0;
     double Gap = 2500.0;
     if (Status.Phase == EAstroMissionPhase::Rendezvous)
     {
@@ -714,94 +799,115 @@ void UAstroMissionSubsystem::Tick(float DeltaTime)
     {
         Gap = 0.3;
     }
-    FAstroVector3d ShipCentre = Base + Axis * (Nose + Gap + AstroRingShipDockOffset());
-    FAstroVector3d CapsuleBase = Base;
+    FAstroVector3d ShipCentre = VehicleBase + DockBF + Axis * (Gap + AstroRingShipDockOffset());
+    FAstroVector3d CapsuleBase = VehicleBase;
     if (bPiloted && Status.Phase >= EAstroMissionPhase::Coast && Status.Phase <= EAstroMissionPhase::Docked)
     {
-        ShipCentre = Base + Axis * (Nose + PilotShipAhead + AstroRingShipDockOffset());
-        CapsuleBase = Base + Axis * DockR.X + Side * DockR.Y + LocalUp * DockR.Z;
+        ShipCentre = VehicleBase + DockBF + Axis * (PilotShipAhead + AstroRingShipDockOffset());
+        CapsuleBase = VehicleBase + Axis * DockR.X + Side * DockR.Y + LocalUp * DockR.Z;
     }
     // Camera first: the actors below are placed in the frame it sets up (placing them
     // before moving the origin left them hundreds of metres behind at ascent speeds).
-    const FAstroVector3d RocketMid = CapsuleBase + Axis * 32.0;
+    // It frames the whole stack, then the craft once the first stage has gone.
+    const double FirstSep = Rocket->GetFirstSeparation();
+    const double CraftBlend = FirstSep < 0.0 ? 1.0 : FMath::SmoothStep(FirstSep, FirstSep + 20.0, MissionTime);
+    const FVector MidLocal = FMath::Lerp(FVector(0, 0, VehicleHeight * 0.45), CraftCentreM, CraftBlend);
+    const FAstroVector3d RocketMid = CapsuleBase + LocalToBF(Turn.RotateVector(MidLocal));
+    const double K = FMath::Clamp(VehicleHeight / 62.0, 0.8, 1.8); // camera distances scale with the vehicle
     FAstroVector3d Cam, Look;
-    const FAstroVector3d GroundCam = SiteUp * (GroundRadius + 20.0) + SiteNorth * 240.0 - SiteEast * 80.0;
+    const FAstroVector3d GroundCam = SiteUp * (GroundRadius + 20.0) + SiteNorth * (240.0 * K) - SiteEast * (80.0 * K);
     if (Status.Phase == EAstroMissionPhase::Countdown)
     {
         Cam = GroundCam;
-        Look = SiteUp * (GroundRadius + 32.0);
+        Look = SiteUp * (GroundRadius + DeckHeight + VehicleHeight * 0.5);
     }
     else if (Status.Phase == EAstroMissionPhase::Ascent)
     {
-        const double PullBack = bStageSeparated && MissionTime < 200.0 ? 110.0 : 55.0;
-        const FAstroVector3d Chase = RocketMid - Axis * PullBack + Side * 140.0 + LocalUp * 25.0;
+        const double PullBack = (bStageSeparated && MissionTime < FirstSep + 40.0 ? 110.0 : 55.0) * K;
+        const FAstroVector3d Chase = RocketMid - Axis * PullBack + Side * (140.0 * K) + LocalUp * (25.0 * K);
         const double Blend = FMath::SmoothStep(8.0, 16.0, RealSinceLiftoff);
-        // Ground camera first (the rocket clears the tower), then a chase camera.
+        // Ground camera first (the vehicle clears the tower), then a chase camera.
         Cam = GroundCam + (Chase - GroundCam) * Blend;
         Look = RocketMid + Axis * (20.0 * Blend);
     }
     else if (Status.Phase == EAstroMissionPhase::Coast || Status.Phase == EAstroMissionPhase::Rendezvous)
     {
-        // Ride just behind the capsule, looking ahead at the ship as it grows.
-        Cam = RocketMid - Axis * 70.0 + Side * 28.0 + LocalUp * 14.0;
+        // Ride just behind the craft, looking ahead at the ship as it grows.
+        Cam = RocketMid - Axis * (70.0 * K) + Side * (28.0 * K) + LocalUp * (14.0 * K);
         Look = ShipCentre;
     }
     else // Docked: a slow orbit around the joined vehicles
     {
         const double A = PhaseSeconds * 0.35;
-        Cam = ShipCentre + (Side * FMath::Cos(A) + LocalUp * 0.35 + Axis * FMath::Sin(A) * 0.6) * 150.0;
+        Cam = ShipCentre + (Side * FMath::Cos(A) + LocalUp * 0.35 + Axis * FMath::Sin(A) * 0.6) * (150.0 * K);
         Look = ShipCentre - Axis * 20.0;
     }
     PlaceCamera(Sim, Cam, Look);
-    const FQuat RocketRot = EngineRotation(Sim, Axis, Side, true);
     Rocket->SetPadTransform(ToEngine(Sim, SiteUp * GroundRadius), EngineRotation(Sim, SiteUp, SiteNorth, true));
     Rocket->SetPadVisible(Altitude < 60000.0);
-    Rocket->SetRocketTransform(ToEngine(Sim, CapsuleBase), RocketRot);
+    Rocket->SetRocketTransform(ToEngine(Sim, CapsuleBase), RocketRot * Turn);
 
-    // Staging: the spent first stage drops behind (the upper stage keeps accelerating away).
-    if ((bPilotAscent ? PStage >= 2 : MissionTime >= 160.0) && !bStageSeparated)
+    // Staging from the vehicle's data: each group separates at its time (piloted: with the first
+    // stage when you stage, the rest above 110 km), then falls away on its own path.
+    GroupSep.SetNum(Rocket->NumGroups());
+    for (int32 i = 0; i < Rocket->NumGroups(); ++i)
     {
-        bStageSeparated = true;
-        Rocket->SeparateStage1();
-        SeparationTime = MissionTime;
-        SeparationBF = Base;
-        SeparationVelBF = Ahead - Base;
+        const double SepAt = Rocket->GroupSeparateAt(i);
+        FGroupSeparation& G = GroupSep[i];
+        if (!Rocket->IsGroupSeparated(i) && SepAt >= 0.0)
+        {
+            const bool bFirst = SepAt <= FirstSep + 1e-3;
+            const bool bGo = bPilotAscent ? (bFirst ? PStage >= 2 : PH > 110000.0) : MissionTime >= SepAt;
+            if (bGo)
+            {
+                Rocket->SeparateGroup(i);
+                G.Time = MissionTime;
+                G.Base = CapsuleBase;
+                G.Velocity = Ahead - Base;
+                G.Push = LocalToBF(Rocket->GroupPushMS(i));
+                G.Rotation = RocketRot * Turn;
+                bStageSeparated = bStageSeparated || bFirst;
+            }
+        }
+        if (Rocket->IsGroupSeparated(i))
+        {
+            const double Dt = MissionTime - G.Time;
+            const FName Name = Rocket->GroupName(i);
+            FAstroVector3d Pos = G.Base + G.Velocity * Dt + G.Push * Dt;
+            double TumbleDegS = 4.0;
+            if (Name == TEXT("Escape"))
+            {
+                // The escape tower's jettison motor carries it ahead and aside, then it falls behind.
+                Pos = Pos + Axis * (12.0 * Dt - 3.0 * Dt * Dt) + Side * (4.0 * Dt) - LocalUp * (4.5 * Dt * Dt);
+                TumbleDegS = 20.0;
+            }
+            else if (Name == TEXT("Fairing"))
+            {
+                Pos = Pos - Axis * (7.5 * Dt * Dt) + Side * (3.0 * Dt);
+                TumbleDegS = 25.0;
+            }
+            else
+            {
+                // Spent stages drop behind: the craft keeps accelerating, they only fall.
+                Pos = Pos - Axis * (6.0 * Dt * Dt) - LocalUp * (4.5 * Dt * Dt);
+            }
+            const FQuat Tumble = FQuat(Sim->SimToEngineDirection(BodyFixedDirToSim(Sim, Side)), FMath::DegreesToRadians(Dt * TumbleDegS));
+            Rocket->SetGroupTransform(i, ToEngine(Sim, Pos), Tumble * G.Rotation);
+            Rocket->SetGroupVisible(i, Dt < 60.0);
+        }
     }
-    if (bStageSeparated)
-    {
-        const double Dt = MissionTime - SeparationTime;
-        const FAstroVector3d Pos = SeparationBF + SeparationVelBF * Dt - Axis * (0.5 * 12.0 * Dt * Dt) - LocalUp * (0.5 * 9.0 * Dt * Dt);
-        const FQuat Tumble = FQuat(Sim->SimToEngineDirection(BodyFixedDirToSim(Sim, Side)), FMath::DegreesToRadians(Dt * 4.0));
-        Rocket->SetStage1Transform(ToEngine(Sim, Pos), Tumble * RocketRot);
-    }
-    if ((bPilotAscent ? PH > 110000.0 : MissionTime >= 215.0) && !bFairingSeparated)
-    {
-        bFairingSeparated = true;
-        Rocket->SeparateFairing();
-        FairingTime = MissionTime;
-        FairingBF = Base;
-        FairingVelBF = Ahead - Base;
-    }
-    if (bFairingSeparated)
-    {
-        const double Dt = MissionTime - FairingTime;
-        const FAstroVector3d Pos = FairingBF + FairingVelBF * Dt - Axis * (0.5 * 15.0 * Dt * Dt) + Side * (3.0 * Dt);
-        const FQuat Tumble = FQuat(Sim->SimToEngineDirection(BodyFixedDirToSim(Sim, Axis.Cross(Side))), FMath::DegreesToRadians(Dt * 25.0));
-        Rocket->SetFairingTransform(ToEngine(Sim, Pos), Tumble * RocketRot);
-    }
-    float S1 = 0.0f, S2 = 0.0f;
+    const float Vacuum = static_cast<float>(FMath::Clamp(Altitude / 40000.0, 0.0, 1.0));
     if (bPilotAscent)
     {
         const bool bBurning = Status.Phase == EAstroMissionPhase::Ascent;
-        S1 = bBurning && PStage == 1 && PUsed1 < Stage1Burn ? static_cast<float>(PThrottle) : 0.0f;
-        S2 = bBurning && PStage == 2 && bPIgnited2 && PUsed2 < Stage2Burn ? static_cast<float>(PThrottle) : 0.0f;
+        const float S1 = bBurning && PStage == 1 && PUsed1 < Stage1Burn ? static_cast<float>(PThrottle) : 0.0f;
+        const float S2 = bBurning && PStage == 2 && bPIgnited2 && PUsed2 < Stage2Burn ? static_cast<float>(PThrottle) : 0.0f;
+        Rocket->SetThrustByStage(S1, S2, Vacuum, White);
     }
     else
     {
-        S1 = Status.Phase == EAstroMissionPhase::Ascent && MissionTime >= 0.0 && MissionTime < 158.0 ? 1.0f : 0.0f;
-        S2 = Status.Phase == EAstroMissionPhase::Ascent && MissionTime >= 165.0 && MissionTime < SECO ? 1.0f : 0.0f;
+        Rocket->SetThrust(MissionTime, Status.Phase == EAstroMissionPhase::Ascent ? 1.0f : 0.0f, Vacuum, White);
     }
-    Rocket->SetThrust(S1, S2, static_cast<float>(FMath::Clamp(Altitude / 40000.0, 0.0, 1.0)), White);
 
     Ship->SetActorHiddenInGame(Status.Phase < EAstroMissionPhase::Coast);
     Ship->SetShipTransform(ToEngine(Sim, ShipCentre), EngineRotation(Sim, Axis * -1.0, LocalUp, false));

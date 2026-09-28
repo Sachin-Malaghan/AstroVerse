@@ -1,5 +1,6 @@
-// See CLAUDE.md "Missions".
+// See CLAUDE.md "Missions" and "Vehicles".
 #include "AstroMissionActors.h"
+#include "AstroVehicleData.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -87,102 +88,218 @@ namespace
 
 // ---------------------------------------------------------------------------- rocket
 
+namespace
+{
+    // Plume look per propellant: outer colour/brightness, core colour/brightness, sea-level
+    // length and width in exit radii.
+    struct FPlumeLook { FLinearColor Outer; float OuterGain; FLinearColor Core; float CoreGain; float Length; float Width; };
+    FPlumeLook LookOf(EAstroPlumeKind Kind)
+    {
+        switch (Kind)
+        {
+        case EAstroPlumeKind::Solid:      return { FLinearColor(1.0f, 0.82f, 0.55f), 1.6f, FLinearColor(1.0f, 0.95f, 0.85f), 3.0f, 34.0f, 3.2f };
+        case EAstroPlumeKind::Kerolox:    return { FLinearColor(1.0f, 0.55f, 0.2f), 1.0f, FLinearColor(1.0f, 0.88f, 0.65f), 2.6f, 26.0f, 3.0f };
+        case EAstroPlumeKind::Hydrolox:   return { FLinearColor(0.65f, 0.72f, 1.0f), 0.35f, FLinearColor(0.9f, 0.85f, 1.0f), 1.3f, 12.0f, 2.2f };
+        default:                          return { FLinearColor(1.0f, 0.45f, 0.2f), 0.6f, FLinearColor(1.0f, 0.72f, 0.45f), 1.5f, 18.0f, 2.6f };
+        }
+    }
+}
+
 AAstroRocketActor::AAstroRocketActor()
 {
     PrimaryActorTick.bCanEverTick = false;
     Tags.Add(TEXT("AstroSolarSystem"));
     Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
     RootComponent = Root;
-    const FShapes S = LoadShapes();
-
-    // Stage 1: 42 m x 3.7 m, nine engine bells under a dark thrust section.
-    Stage1Root = CreateDefaultSubobject<USceneComponent>(TEXT("Stage1"));
-    Stage1Root->SetupAttachment(Root);
-    Part(Stage1Root, TEXT("S1Body"), S.Cylinder, FVector(0, 0, 21.5), FVector(3.7, 3.7, 39.0), White);
-    Part(Stage1Root, TEXT("S1Thrust"), S.Cylinder, FVector(0, 0, 1.5), FVector(3.8, 3.8, 3.0), Dark);
-    Part(Stage1Root, TEXT("S1Interstage"), S.Cylinder, FVector(0, 0, 41.2), FVector(3.72, 3.72, 2.4), Dark);
-    for (int32 k = 0; k < 9; ++k)
-    {
-        const double A = k * UE_TWO_PI / 8.0;
-        const FVector At = k == 8 ? FVector(0, 0, -0.9) : FVector(FMath::Cos(A) * 1.2, FMath::Sin(A) * 1.2, -0.9);
-        Part(Stage1Root, *FString::Printf(TEXT("S1Bell%d"), k), S.Cone, At, FVector(0.9, 0.9, 1.8), Steel, FRotator(180, 0, 0));
-    }
-    // Grid fins and legs (folded) for a recognisable booster silhouette.
-    for (int32 k = 0; k < 4; ++k)
-    {
-        const double A = k * UE_HALF_PI + UE_PI / 4.0;
-        const FVector Out(FMath::Cos(A), FMath::Sin(A), 0.0);
-        Part(Stage1Root, *FString::Printf(TEXT("S1Leg%d"), k), S.Cube, Out * 1.95 + FVector(0, 0, 5.0), FVector(0.3, 0.3, 9.0), Dark,
-            FRotator(0, FMath::RadiansToDegrees(A), 0));
-        Part(Stage1Root, *FString::Printf(TEXT("S1Fin%d"), k), S.Cube, Out * 2.3 + FVector(0, 0, 38.5), FVector(0.9, 0.1, 1.2), Dark,
-            FRotator(0, FMath::RadiansToDegrees(A), 0));
-    }
-    Stage1Plume = Plume(Stage1Root, TEXT("S1Plume"), S.Cone, -1.8, 55.0, 7.0);
-    Stage1Core = Plume(Stage1Root, TEXT("S1Core"), S.Cone, -1.8, 14.0, 3.2);
-
-    // Upper stage + crew capsule, above the interstage.
-    UpperRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Upper"));
-    UpperRoot->SetupAttachment(Root);
-    Part(UpperRoot, TEXT("S2Body"), S.Cylinder, FVector(0, 0, 49.0), FVector(3.7, 3.7, 12.0), White);
-    Part(UpperRoot, TEXT("S2Bell"), S.Cone, FVector(0, 0, 41.8), FVector(1.8, 1.8, 3.0), Steel, FRotator(180, 0, 0));
-    Part(UpperRoot, TEXT("CapsuleTrunk"), S.Cylinder, FVector(0, 0, 56.5), FVector(3.7, 3.7, 3.0), Grey);
-    Part(UpperRoot, TEXT("Capsule"), S.Cone, FVector(0, 0, 60.0), FVector(3.7, 3.7, 4.0), White);
-    Part(UpperRoot, TEXT("CapsuleNose"), S.Sphere, FVector(0, 0, 62.0), FVector(0.9, 0.9, 0.9), Dark);
-    Stage2Plume = Plume(UpperRoot, TEXT("S2Plume"), S.Cone, 40.3, 40.0, 10.0);
-
-    // Payload fairing over the capsule (two halves in reality; one shell here).
-    FairingRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Fairing"));
-    FairingRoot->SetupAttachment(Root);
-    Part(FairingRoot, TEXT("FairingBase"), S.Cylinder, FVector(0, 0, 58.5), FVector(4.6, 4.6, 5.0), White);
-    Part(FairingRoot, TEXT("FairingOgive"), S.Cone, FVector(0, 0, 64.5), FVector(4.6, 4.6, 7.0), White);
-
-    // Pad and tower (stay behind at the site).
     PadRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Pad"));
     PadRoot->SetupAttachment(Root);
     PadRoot->SetUsingAbsoluteLocation(true);
     PadRoot->SetUsingAbsoluteRotation(true);
-    Part(PadRoot, TEXT("PadDeck"), S.Cube, FVector(0, 0, -1.8), FVector(40.0, 40.0, 3.0), Grey);
-    Part(PadRoot, TEXT("Flame trench"), S.Cube, FVector(0, 12, -1.9), FVector(8.0, 18.0, 3.0), Dark);
-    Part(PadRoot, TEXT("Tower"), S.Cube, FVector(-9.0, 0, 38.0), FVector(4.0, 4.0, 80.0), FLinearColor(0.35f, 0.12f, 0.08f));
-    Part(PadRoot, TEXT("Arm"), S.Cube, FVector(-5.0, 0, 58.0), FVector(8.0, 1.2, 1.2), FLinearColor(0.35f, 0.12f, 0.08f));
-    for (int32 k = 0; k < 4; ++k)
-    {
-        // Launch mount: four posts holding the booster 7 m above the deck (the flame shows).
-        const double A = k * UE_HALF_PI + UE_PI / 4.0;
-        Part(PadRoot, *FString::Printf(TEXT("Mount%d"), k), S.Cube, FVector(FMath::Cos(A) * 2.6, FMath::Sin(A) * 2.6, 3.5), FVector(0.8, 0.8, 7.0), Dark);
-    }
-    for (int32 k = 0; k < 4; ++k)
-    {
-        Part(PadRoot, *FString::Printf(TEXT("Mast%d"), k), S.Cylinder, FVector(k < 2 ? -16 : 16, k % 2 ? -16 : 16, 45.0), FVector(0.8, 0.8, 90.0), Grey);
-    }
-    SetThrust(0, 0, 0, 1.0);
-}
-
-UStaticMeshComponent* AAstroRocketActor::Part(USceneComponent* Parent, const TCHAR* Name, UStaticMesh* Mesh, const FVector& CentreM, const FVector& SizeM, const FLinearColor& Colour, const FRotator& Rotation)
-{
-    UStaticMeshComponent* C = MakePart(this, Parent, Name, Mesh, CentreM, SizeM, Rotation);
-    Parts.Add(C);
-    PendingColours.Emplace(C, Colour);
-    return C;
-}
-
-UStaticMeshComponent* AAstroRocketActor::Plume(USceneComponent* Parent, const TCHAR* Name, UStaticMesh* Cone, double TopM, double LengthM, double WidthM)
-{
-    // Cone apex (+Z) at the nozzle, widening away from the rocket.
-    UStaticMeshComponent* C = MakePart(this, Parent, Name, Cone, FVector(0, 0, TopM - LengthM * 0.5), FVector(WidthM, WidthM, LengthM), FRotator::ZeroRotator);
-    C->SetCastShadow(false);
-    return C;
 }
 
 void AAstroRocketActor::BeginPlay()
 {
     Super::BeginPlay();
-    ApplyColours(this, PendingColours);
-    for (UStaticMeshComponent* P : { Stage1Plume.Get(), Stage1Core.Get(), Stage2Plume.Get() })
+}
+
+UStaticMeshComponent* AAstroRocketActor::NewPart(USceneComponent* Parent, UStaticMesh* Mesh, const FVector& CentreM, const FVector& Scale, const FRotator& Rotation)
+{
+    UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
+    C->SetupAttachment(Parent);
+    C->SetStaticMesh(Mesh);
+    C->SetRelativeLocationAndRotation(CentreM * 100.0, Rotation);
+    C->SetRelativeScale3D(Scale);
+    C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    C->SetCastShadow(true);
+    C->bNeverDistanceCull = true;
+    C->RegisterComponent();
+    Keep.Add(C);
+    return C;
+}
+
+int32 AAstroRocketActor::FindOrAddGroup(FName Name, double SeparateAt, const FVector& Push)
+{
+    for (int32 i = 0; i < Groups.Num(); ++i)
     {
-        PlumeMIDs.Add(MakePlumeMID(this, P));
+        // Parts of one group that separate at different times or push different ways (left and
+        // right boosters) get their own roots.
+        if (Groups[i].Name == Name && Groups[i].SeparateAt == SeparateAt && Groups[i].PushMS.Equals(Push))
+        {
+            return i;
+        }
     }
-    SetThrust(0, 0, 0, 1.0);
+    FGroup G;
+    G.Name = Name;
+    G.SeparateAt = SeparateAt;
+    G.PushMS = Push;
+    G.Root = NewObject<USceneComponent>(this);
+    G.Root->SetupAttachment(Root);
+    G.Root->RegisterComponent();
+    Keep.Add(G.Root);
+    return Groups.Add(G);
+}
+
+bool AAstroRocketActor::BuildVehicle(FName Vehicle)
+{
+    const FAstroVehicleRow* Row = FAstroVehicleCatalog::Find(Vehicle);
+    const TArray<const FAstroVehiclePartRow*> PartRows = FAstroVehicleCatalog::Parts(Vehicle);
+    if (!Row || PartRows.Num() == 0)
+    {
+        return false;
+    }
+    FBox Craft(ForceInit);
+    for (const FAstroVehiclePartRow* P : PartRows)
+    {
+        UStaticMesh* Mesh = LoadObject<UStaticMesh>(nullptr, *P->Mesh);
+        if (!Mesh)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("AstroVehicle %s: mesh %s not found"), *Vehicle.ToString(), *P->Mesh);
+            continue;
+        }
+        const int32 G = FindOrAddGroup(P->Group, P->SeparateAtS, P->SeparationPushMS);
+        NewPart(Groups[G].Root, Mesh, FVector::ZeroVector, FVector::OneVector);
+        if (P->SeparateAtS < 0.0)
+        {
+            Craft += Mesh->GetBoundingBox();
+        }
+    }
+    CraftCentreM = Craft.IsValid ? Craft.GetCenter() / 100.0 : FVector(0, 0, Row->HeightM * 0.8);
+
+    const FShapes S = LoadShapes();
+    for (const FAstroVehicleEngineRow* E : FAstroVehicleCatalog::Engines(Vehicle))
+    {
+        int32 G = INDEX_NONE;
+        for (int32 i = 0; i < Groups.Num() && G == INDEX_NONE; ++i)
+        {
+            // The engine's group; with split groups (left / right boosters) the one on its side.
+            if (Groups[i].Name == E->Group && (Groups[i].PushMS.IsNearlyZero() || FVector::DotProduct(Groups[i].PushMS, E->ExitM) > 0.0))
+            {
+                G = i;
+            }
+        }
+        if (G == INDEX_NONE)
+        {
+            continue;
+        }
+        FPlume P;
+        P.Group = G;
+        P.Kind = static_cast<uint8>(E->Kind);
+        P.Start = E->BurnStartS;
+        P.End = E->BurnEndS;
+        P.RadiusM = E->ExitRadiusM;
+        P.ExitM = E->ExitM;
+        P.Outer = NewPart(Groups[G].Root, S.Cone, E->ExitM, FVector::OneVector);
+        P.Core = NewPart(Groups[G].Root, S.Cone, E->ExitM, FVector::OneVector);
+        for (UStaticMeshComponent* C : { P.Outer.Get(), P.Core.Get() })
+        {
+            C->SetCastShadow(false);
+            C->SetVisibility(false);
+        }
+        P.OuterMID = MakePlumeMID(this, P.Outer);
+        P.CoreMID = MakePlumeMID(this, P.Core);
+        Keep.Add(P.OuterMID);
+        Keep.Add(P.CoreMID);
+        Plumes.Add(P);
+    }
+
+    // Pad: the vehicle's platform mesh, or our generic deck, pedestal and tower.
+    UStaticMesh* PadMesh = Row->PadMesh.IsEmpty() ? nullptr : LoadObject<UStaticMesh>(nullptr, *Row->PadMesh);
+    if (PadMesh)
+    {
+        NewPart(PadRoot, PadMesh, FVector::ZeroVector, FVector::OneVector, FRotator(0, Row->PadYawDeg, 0));
+    }
+    else
+    {
+        BuildGenericPad(Row->PadDeckHeightM);
+    }
+    ApplyColours(this, PendingColours);
+    return true;
+}
+
+void AAstroRocketActor::BuildGenericPad(double DeckHeightM)
+{
+    const FShapes S = LoadShapes();
+    const FLinearColor Rust(0.35f, 0.12f, 0.08f);
+    auto Add = [this](UStaticMesh* Mesh, const FVector& CentreM, const FVector& SizeM, const FLinearColor& Colour)
+    {
+        PendingColours.Emplace(NewPart(PadRoot, Mesh, CentreM, SizeM), Colour);
+    };
+    Add(S.Cube, FVector(0, 0, -1.8), FVector(40.0, 40.0, 3.0), Grey);
+    Add(S.Cube, FVector(0, 12, -1.9), FVector(8.0, 18.0, 3.0), Dark);
+    Add(S.Cube, FVector(-11.0, 0, 38.0), FVector(4.0, 4.0, 80.0), Rust);
+    Add(S.Cube, FVector(-7.0, 0, 50.0), FVector(8.0, 1.2, 1.2), Rust);
+    for (int32 k = 0; k < 4; ++k)
+    {
+        // Launch pedestal: posts holding the vehicle DeckHeightM above the deck (the flame shows).
+        const double A = k * UE_HALF_PI + UE_PI / 4.0;
+        Add(S.Cube, FVector(FMath::Cos(A) * 1.5, FMath::Sin(A) * 1.5, DeckHeightM * 0.5), FVector(0.8, 0.8, DeckHeightM), Dark);
+        Add(S.Cylinder, FVector(k < 2 ? -16 : 16, k % 2 ? -16 : 16, 45.0), FVector(0.8, 0.8, 90.0), Grey);
+    }
+}
+
+double AAstroRocketActor::GetFirstSeparation() const
+{
+    double First = -1.0;
+    for (const FGroup& G : Groups)
+    {
+        if (G.SeparateAt >= 0.0 && (First < 0.0 || G.SeparateAt < First))
+        {
+            First = G.SeparateAt;
+        }
+    }
+    return First;
+}
+
+void AAstroRocketActor::SeparateGroup(int32 Index)
+{
+    FGroup& G = Groups[Index];
+    G.bSeparated = true;
+    G.Root->SetUsingAbsoluteLocation(true);
+    G.Root->SetUsingAbsoluteRotation(true);
+}
+
+void AAstroRocketActor::SetGroupTransform(int32 Index, const FVector& Base, const FQuat& Rotation)
+{
+    if (Groups[Index].bSeparated)
+    {
+        Groups[Index].Root->SetWorldLocationAndRotation(Base, Rotation);
+    }
+}
+
+void AAstroRocketActor::SetGroupVisible(int32 Index, bool bVisible)
+{
+    Groups[Index].Root->SetVisibility(bVisible, true);
+    RestorePlumes();
+}
+
+void AAstroRocketActor::RestorePlumes()
+{
+    for (FPlume& P : Plumes)
+    {
+        const bool bShow = P.bOn && Groups[P.Group].Root->IsVisible();
+        P.Outer->SetVisibility(bShow);
+        P.Core->SetVisibility(bShow);
+    }
 }
 
 void AAstroRocketActor::SetRocketTransform(const FVector& Base, const FQuat& Rotation)
@@ -190,50 +307,47 @@ void AAstroRocketActor::SetRocketTransform(const FVector& Base, const FQuat& Rot
     SetActorLocationAndRotation(Base, Rotation);
 }
 
-void AAstroRocketActor::SetStage1Transform(const FVector& Base, const FQuat& Rotation)
+void AAstroRocketActor::ApplyPlume(FPlume& P, float Power, float VacuumFraction, double ExposureWhite)
 {
-    if (bStage1Separated)
+    const bool bOn = Power > 0.01f && !Groups[P.Group].bSeparated;
+    P.bOn = bOn;
+    P.Outer->SetVisibility(bOn);
+    P.Core->SetVisibility(bOn);
+    if (!bOn)
     {
-        Stage1Root->SetWorldLocationAndRotation(Base, Rotation);
+        return;
     }
-}
-
-void AAstroRocketActor::SetFairingTransform(const FVector& Base, const FQuat& Rotation)
-{
-    if (bFairingSeparated)
-    {
-        FairingRoot->SetWorldLocationAndRotation(Base, Rotation);
-    }
-}
-
-void AAstroRocketActor::SeparateStage1()
-{
-    bStage1Separated = true;
-    Stage1Root->SetUsingAbsoluteLocation(true);
-    Stage1Root->SetUsingAbsoluteRotation(true);
-}
-
-void AAstroRocketActor::SeparateFairing()
-{
-    bFairingSeparated = true;
-    FairingRoot->SetUsingAbsoluteLocation(true);
-    FairingRoot->SetUsingAbsoluteRotation(true);
-}
-
-void AAstroRocketActor::SetThrust(float Stage1Power, float Stage2Power, float VacuumFraction, double ExposureWhite)
-{
-    const float W = static_cast<float>(ExposureWhite);
-    Stage1Plume->SetVisibility(Stage1Power > 0.01f);
-    Stage1Core->SetVisibility(Stage1Power > 0.01f);
-    Stage2Plume->SetVisibility(Stage2Power > 0.01f);
-    // In thin air the plume balloons outward.
+    const FPlumeLook L = LookOf(static_cast<EAstroPlumeKind>(P.Kind));
+    // In thin air the plume balloons outward and dims per area.
     const float Spread = 1.0f + 2.5f * VacuumFraction;
-    Stage1Plume->SetRelativeScale3D(FVector(7.0f * Spread, 7.0f * Spread, 55.0f * (1.0f + 0.6f * VacuumFraction)));
-    if (PlumeMIDs.Num() == 3)
+    const double Len = P.RadiusM * L.Length * (1.0 + 0.6 * VacuumFraction) * FMath::Lerp(0.6, 1.0, static_cast<double>(Power));
+    const double Wid = P.RadiusM * L.Width * Spread;
+    // Cone apex (+Z, local 50) at the nozzle exit, widening away from the vehicle.
+    P.Outer->SetRelativeLocation((P.ExitM - FVector(0, 0, Len * 0.5)) * 100.0);
+    P.Outer->SetRelativeScale3D(FVector(Wid, Wid, Len));
+    const double CoreLen = Len * 0.3, CoreWid = P.RadiusM * 1.6;
+    P.Core->SetRelativeLocation((P.ExitM - FVector(0, 0, CoreLen * 0.5)) * 100.0);
+    P.Core->SetRelativeScale3D(FVector(CoreWid, CoreWid, CoreLen));
+    const float W = static_cast<float>(ExposureWhite) * Power;
+    if (P.OuterMID) { P.OuterMID->SetVectorParameterValue(TEXT("Glow"), L.Outer * (L.OuterGain * W / Spread)); }
+    if (P.CoreMID) { P.CoreMID->SetVectorParameterValue(TEXT("Glow"), L.Core * (L.CoreGain * W)); }
+}
+
+void AAstroRocketActor::SetThrust(double MissionTime, float Throttle, float VacuumFraction, double ExposureWhite)
+{
+    for (FPlume& P : Plumes)
     {
-        if (PlumeMIDs[0]) { PlumeMIDs[0]->SetVectorParameterValue(TEXT("Glow"), FLinearColor(1.0f, 0.55f, 0.2f) * (Stage1Power * W * 0.9f / Spread)); }
-        if (PlumeMIDs[1]) { PlumeMIDs[1]->SetVectorParameterValue(TEXT("Glow"), FLinearColor(1.0f, 0.9f, 0.7f) * (Stage1Power * W * 2.5f)); }
-        if (PlumeMIDs[2]) { PlumeMIDs[2]->SetVectorParameterValue(TEXT("Glow"), FLinearColor(0.7f, 0.75f, 1.0f) * (Stage2Power * W * 0.6f)); }
+        const bool bBurning = MissionTime >= P.Start && MissionTime < P.End;
+        ApplyPlume(P, bBurning ? Throttle : 0.0f, VacuumFraction, ExposureWhite);
+    }
+}
+
+void AAstroRocketActor::SetThrustByStage(float Stage1Power, float Stage2Power, float VacuumFraction, double ExposureWhite)
+{
+    const double First = GetFirstSeparation();
+    for (FPlume& P : Plumes)
+    {
+        ApplyPlume(P, First < 0.0 || P.Start < First ? Stage1Power : Stage2Power, VacuumFraction, ExposureWhite);
     }
 }
 
@@ -249,7 +363,14 @@ void AAstroRocketActor::SetPadVisible(bool bVisible)
 
 void AAstroRocketActor::SetUpperVisible(bool bVisible)
 {
-    UpperRoot->SetVisibility(bVisible, true);
+    for (int32 i = 0; i < Groups.Num(); ++i)
+    {
+        if (Groups[i].SeparateAt < 0.0)
+        {
+            Groups[i].Root->SetVisibility(bVisible, true);
+        }
+    }
+    RestorePlumes();
 }
 
 // ---------------------------------------------------------------------------- ring ship
