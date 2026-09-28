@@ -161,6 +161,7 @@ VR stays built but is parked for later (user decision); the work below is deskto
 ## Decided — travel (Phase 9, decided 2026-09-27)
 
 - **Two player-selectable transit styles**, both built: a **cinematic warp** (fixed camera sequence with a stylized warp effect) and a **player-piloted ship** the user flies through the warp. The choice is a user setting, not a build-time switch.
+- **Third style, real-time flight (added 2026-09-28, now the default):** a straight flight through real space from where you are to the destination - no tunnel; distance covered grows exponentially from the start and shrinks exponentially into the arrival, so the cruise reaches hundreds to thousands of c and every decade of distance takes the same screen time (~1.6x the warp duration, `RealFlightTimeScale`). HUD shows speed in c and distance to go. `astro.Travel.Style RealFlight`.
 - **God-mode clock during transit is a user setting:** either pause for the duration of the trip, or keep running at the current timescale.
 - Defaults until someone says otherwise: destination is picked from the body list / by pointing at a body; transit duration grows with the log of distance so short hops stay short.
 

@@ -12,7 +12,11 @@ enum class EAstroTravelStyle : uint8
     // Fixed camera flight with a warp effect; the player just watches.
     CinematicWarp,
     // The player flies a ship through the warp: throttle sets the pace, the stick steers in the tunnel.
-    PilotedShip
+    PilotedShip,
+    // Real motion through real space (decided 2026-09-28): a straight flight from where you are
+    // to the destination, no tunnel, the planets / belt / Sun passing by; speed ramps up and
+    // down exponentially (to thousands of c between planets) so a trip still takes seconds.
+    RealFlight
 };
 
 UENUM(BlueprintType)
@@ -34,7 +38,7 @@ public:
     static UAstroTravelSettings* Get() { return GetMutableDefault<UAstroTravelSettings>(); }
 
     UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Astro|Travel")
-    EAstroTravelStyle Style = EAstroTravelStyle::CinematicWarp;
+    EAstroTravelStyle Style = EAstroTravelStyle::RealFlight; // default since 2026-09-28 (user preference)
 
     UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Astro|Travel")
     EAstroClockDuringTravel Clock = EAstroClockDuringTravel::Pause;
@@ -55,6 +59,10 @@ public:
 
     UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Astro|Travel")
     double MaxSeconds = 18.0;
+
+    // Real flight lasts this much longer than the warp (there is scenery to watch).
+    UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Astro|Travel")
+    double RealFlightTimeScale = 1.6;
 
     UFUNCTION(BlueprintCallable, Category = "Astro|Travel")
     void Save() { SaveConfig(); }

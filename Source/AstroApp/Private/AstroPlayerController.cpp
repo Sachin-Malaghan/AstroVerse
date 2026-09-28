@@ -169,6 +169,11 @@ void AAstroPlayerController::PlayerTick(float DeltaTime)
         UI->SetViewerStatus(TEXT("Milky Way  -  galaxy scale"));
         return;
     }
+    if (const UAstroTravelSubsystem* Travel = UAstroTravelSubsystem::Get(this); Travel && Travel->IsTravelling())
+    {
+        UI->SetViewerStatus(FString::Printf(TEXT("In transit to %s"), *Travel->GetDestination().ToString()));
+        return;
+    }
     const FName Body = Viewer->GetReferenceBody();
     const int32 Index = Sim->FindBodyIndex(Body);
     const FString Where = Index != INDEX_NONE ? Sim->GetRegistry().Get(Index).DisplayName.ToString() : Body.ToString();

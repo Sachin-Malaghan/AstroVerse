@@ -893,8 +893,19 @@ void UAstroHUDWidget::UpdateTravel()
     TravelBar->SetVisibility(Visible);
     if (bTravelling)
     {
-        TravelText->SetText(FText::FromString(FString::Printf(TEXT("Travelling to %s%s   (T to skip)"), *Travel->GetDestination().ToString(),
-            Travel->GetActiveStyle() == EAstroTravelStyle::PilotedShip ? TEXT("  -  W/S throttle, mouse steer") : TEXT(""))));
+        FString Extra;
+        if (Travel->GetActiveStyle() == EAstroTravelStyle::PilotedShip)
+        {
+            Extra = TEXT("  -  W/S throttle, mouse steer");
+        }
+        else if (Travel->GetActiveStyle() == EAstroTravelStyle::RealFlight)
+        {
+            const double C = Travel->GetSpeedMetersPerSecond() / 299792458.0;
+            const FString Speed = C >= 1.0 ? FString::Printf(TEXT("%s c"), *FString::FormatAsNumber(FMath::RoundToInt(C)))
+                                           : AstroUIFormat::Speed(Travel->GetSpeedMetersPerSecond());
+            Extra = FString::Printf(TEXT("  -  %s  -  %s to go"), *Speed, *AstroUIFormat::Distance(Travel->GetRemainingMeters()));
+        }
+        TravelText->SetText(FText::FromString(FString::Printf(TEXT("Travelling to %s%s   (T to skip)"), *Travel->GetDestination().ToString(), *Extra)));
         TravelBar->SetPercent(static_cast<float>(Travel->GetProgress()));
     }
 }

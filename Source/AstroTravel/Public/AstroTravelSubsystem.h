@@ -55,6 +55,10 @@ public:
     // Warp strength 0..1 (peaks mid-transit), for effects and comfort vignettes.
     double GetWarpIntensity() const;
 
+    // Current speed along the path (m/s) and distance still to go (m), for the HUD.
+    double GetSpeedMetersPerSecond() const { return SpeedMps; }
+    double GetRemainingMeters() const { return RemainingMeters; }
+
     UPROPERTY(BlueprintAssignable, Category = "Astro|Travel")
     FOnAstroTravelEvent OnTravelStarted;
 
@@ -64,6 +68,7 @@ public:
 private:
     void Arrive();
     void ApplyPathPoint(double S);
+    void ApplyRealFlight(class UAstroSimulationSubsystem* Sim, AActor* View, double S);
 
     bool bTravelling = false;
     EAstroTravelStyle ActiveStyle = EAstroTravelStyle::CinematicWarp;
@@ -71,6 +76,11 @@ private:
     int32 Destination = INDEX_NONE;
     FAstroVector3d StartOffset;   // pawn - destination at departure (m)
     FAstroVector3d ArrivalOffset; // pawn - destination at arrival (m)
+    FAstroVector3d StartAbsolute; // real flight: departure point (sim frame, fixed)
+    FAstroVector3d LastPosition;
+    bool bHasLastPosition = false;
+    double SpeedMps = 0.0;
+    double RemainingMeters = 0.0;
     double Duration = 5.0;
     double Elapsed = 0.0;
     double Progress = 0.0;

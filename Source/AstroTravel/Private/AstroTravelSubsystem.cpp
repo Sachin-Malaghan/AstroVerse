@@ -106,16 +106,29 @@ bool UAstroTravelSubsystem::BeginTravel(FName BodyID, bool bForceCinematic)
         ArrivalDir = Rotate(ToSun, Up, FMath::DegreesToRadians(40.0));
         ArrivalDir = Rotate(ArrivalDir, ArrivalDir.Cross(Up).Normalized(), FMath::DegreesToRadians(-10.0)).Normalized();
     }
+    ActiveStyle = bForceCinematic ? EAstroTravelStyle::CinematicWarp : Settings->Style;
+    if (ActiveStyle == EAstroTravelStyle::RealFlight)
+    {
+        // Straight in: arrive on the line of approach (a last-second swing would be a jump cut).
+        ArrivalDir = StartOffset.Normalized();
+    }
     ArrivalOffset = ArrivalDir * ArrivalDistance;
+    StartAbsolute = BodyPos + StartOffset;
+    bHasLastPosition = false;
+    SpeedMps = 0.0;
+    RemainingMeters = StartOffset.Length();
 
     const double Decades = FMath::Max(0.0, FMath::LogX(10.0, StartOffset.Length() / ArrivalDistance));
     Duration = FMath::Clamp(Settings->BaseSeconds + Settings->SecondsPerDecade * Decades, Settings->BaseSeconds, Settings->MaxSeconds);
+    if (ActiveStyle == EAstroTravelStyle::RealFlight)
+    {
+        Duration *= Settings->RealFlightTimeScale;
+    }
     Elapsed = 0.0;
     Progress = 0.0;
     StartRotation = View->GetActorQuat();
     Destination = Body;
     DestinationID = BodyID;
-    ActiveStyle = bForceCinematic ? EAstroTravelStyle::CinematicWarp : Settings->Style;
     PilotThrottle = 0.0f;
     PilotSteer = FVector2D::ZeroVector;
     TunnelOffset = FVector2D::ZeroVector;
@@ -139,14 +152,14 @@ bool UAstroTravelSubsystem::BeginTravel(FName BodyID, bool bForceCinematic)
     {
         Effects = GetWorld()->SpawnActor<AAstroWarpEffects>();
     }
-    if (Effects.IsValid())
+    if (Effects.IsValid() && ActiveStyle != EAstroTravelStyle::RealFlight)
     {
         Effects->Begin(View, ActiveStyle == EAstroTravelStyle::PilotedShip);
     }
 
     bTravelling = true;
     UE_LOG(LogAstroTravel, Display, TEXT("Travel to %s (%s, clock %s): %.1f s"), *BodyID.ToString(),
-        ActiveStyle == EAstroTravelStyle::PilotedShip ? TEXT("piloted") : TEXT("cinematic"),
+        ActiveStyle == EAstroTravelStyle::PilotedShip ? TEXT("piloted") : ActiveStyle == EAstroTravelStyle::RealFlight ? TEXT("real flight") : TEXT("cinematic"),
         Settings->Clock == EAstroClockDuringTravel::Pause ? TEXT("paused") : TEXT("running"), Duration);
     OnTravelStarted.Broadcast(BodyID);
     return true;
@@ -183,7 +196,7 @@ void UAstroTravelSubsystem::Tick(float DeltaTime)
         Progress = FMath::Min(1.0, Elapsed / Duration);
     }
 
-    ApplyPathPoint(SmootherStep(Progress));
+    ApplyPathPoint(ActiveStyle == EAstroTravelStyle::RealFlight ? Progress : SmootherStep(Progress));
     if (Progress >= 1.0)
     {
         Arrive();
@@ -196,6 +209,11 @@ void UAstroTravelSubsystem::ApplyPathPoint(double S)
     AActor* View = ViewActorOf(GetWorld());
     if (!Sim || !View)
     {
+        return;
+    }
+    if (ActiveStyle == EAstroTravelStyle::RealFlight)
+    {
+        ApplyRealFlight(Sim, View, S);
         return;
     }
     // Geometric (log-space) distance and a delayed swing onto the arrival direction.
@@ -230,6 +248,48 @@ void UAstroTravelSubsystem::ApplyPathPoint(double S)
     {
         Effects->Update(static_cast<float>(Warp), static_cast<float>(Distance), TunnelOffset);
     }
+}
+
+void UAstroTravelSubsystem::ApplyRealFlight(UAstroSimulationSubsystem* Sim, AActor* View, double S)
+{
+    // Straight line from the (fixed) departure point to the arrival point beside the (moving)
+    // destination. Distance covered grows exponentially from the start and the distance left
+    // shrinks exponentially into the arrival, meeting mid-way: gentle departure, a very fast
+    // cruise, gentle arrival - every decade of distance takes the same screen time.
+    const FAstroVector3d BodyPos = Sim->GetSimulation().GetBodyState(Destination).Position;
+    const FAstroVector3d Target = BodyPos + ArrivalOffset;
+    const FAstroVector3d Line = Target - StartAbsolute;
+    const double Length = FMath::Max(Line.Length(), 1.0);
+    const double Near = FMath::Clamp(ArrivalOffset.Length() * 0.5, 1.0, Length * 0.25); // the scale of the ends
+    const double Half = Length * 0.5;
+    double Travelled;
+    if (S < 0.5)
+    {
+        Travelled = FMath::Exp(FMath::Lerp(FMath::Loge(Near), FMath::Loge(Half), S / 0.5)) - Near * (1.0 - S / 0.5);
+    }
+    else
+    {
+        Travelled = Length - (FMath::Exp(FMath::Lerp(FMath::Loge(Half), FMath::Loge(Near), (S - 0.5) / 0.5)) - Near * ((S - 0.5) / 0.5));
+    }
+    Travelled = FMath::Clamp(Travelled, 0.0, Length);
+    if (S >= 1.0)
+    {
+        Travelled = Length;
+    }
+    const FAstroVector3d Position = StartAbsolute + Line * (Travelled / Length);
+    RemainingMeters = (BodyPos - Position).Length();
+
+    const double Dt = FMath::Max(static_cast<double>(GetWorld()->GetDeltaSeconds()), 1e-4);
+    SpeedMps = bHasLastPosition ? (Position - LastPosition).Length() / Dt : 0.0;
+    LastPosition = Position;
+    bHasLastPosition = true;
+
+    // The origin rides the path; the viewer sits at engine (0,0,0) looking at the destination.
+    Sim->SetRenderOriginAnchor(Destination, Position - BodyPos);
+    View->SetActorLocation(FVector::ZeroVector);
+    const FVector ToBody = Sim->SimToEngineDirection((BodyPos - Position).Normalized());
+    const FQuat Facing = FRotationMatrix::MakeFromXZ(ToBody, FVector::UpVector).ToQuat();
+    View->SetActorRotation(FQuat::Slerp(StartRotation, Facing, FMath::SmoothStep(0.0, 0.12, S)));
 }
 
 void UAstroTravelSubsystem::FinishNow()
@@ -287,7 +347,9 @@ namespace
             if (Args.Num() > 0)
             {
                 UAstroTravelSettings* Settings = UAstroTravelSettings::Get();
-                Settings->Style = Args[0].StartsWith(TEXT("P"), ESearchCase::IgnoreCase) ? EAstroTravelStyle::PilotedShip : EAstroTravelStyle::CinematicWarp;
+                Settings->Style = Args[0].StartsWith(TEXT("P"), ESearchCase::IgnoreCase) ? EAstroTravelStyle::PilotedShip
+                                : Args[0].StartsWith(TEXT("R"), ESearchCase::IgnoreCase) ? EAstroTravelStyle::RealFlight
+                                : EAstroTravelStyle::CinematicWarp;
                 Settings->Save();
             }
         }));

@@ -128,7 +128,8 @@ void UAstroPauseMenuWidget::Build()
 void UAstroPauseMenuWidget::Refresh()
 {
     const UAstroTravelSettings* Settings = UAstroTravelSettings::Get();
-    StyleLabel->SetText(FText::FromString(Settings->Style == EAstroTravelStyle::PilotedShip ? TEXT("Travel:  Piloted ship") : TEXT("Travel:  Cinematic warp")));
+    StyleLabel->SetText(FText::FromString(Settings->Style == EAstroTravelStyle::PilotedShip ? TEXT("Travel:  Piloted ship (warp tunnel)")
+        : Settings->Style == EAstroTravelStyle::RealFlight ? TEXT("Travel:  Real-time flight (fly through space)") : TEXT("Travel:  Cinematic warp")));
     ClockLabel->SetText(FText::FromString(Settings->Clock == EAstroClockDuringTravel::Pause ? TEXT("Clock during travel:  Paused") : TEXT("Clock during travel:  Keeps running")));
     SkyLabel->SetText(FText::FromString(AAstroSpaceEnvironment::GetMilkyWayMode() != 0
         ? TEXT("Milky Way:  Enhanced (easy to see)") : TEXT("Milky Way:  Realistic (as photographed)")));
@@ -153,7 +154,9 @@ void UAstroPauseMenuWidget::OnResumeClicked()
 void UAstroPauseMenuWidget::OnStyleClicked()
 {
     UAstroTravelSettings* Settings = UAstroTravelSettings::Get();
-    Settings->Style = Settings->Style == EAstroTravelStyle::PilotedShip ? EAstroTravelStyle::CinematicWarp : EAstroTravelStyle::PilotedShip;
+    Settings->Style = Settings->Style == EAstroTravelStyle::CinematicWarp ? EAstroTravelStyle::RealFlight
+                    : Settings->Style == EAstroTravelStyle::RealFlight ? EAstroTravelStyle::PilotedShip
+                    : EAstroTravelStyle::CinematicWarp;
     Settings->Save();
     Refresh();
 }
