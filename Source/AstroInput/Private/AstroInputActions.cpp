@@ -76,6 +76,9 @@ UAstroInputActions* UAstroInputActions::Create(UObject* Outer)
     A->FaceSun = MakeAction(A, TEXT("IA_FaceSun"), EInputActionValueType::Boolean);
     A->DragHold = MakeAction(A, TEXT("IA_DragHold"), EInputActionValueType::Boolean);
     A->LockTarget = MakeAction(A, TEXT("IA_LockTarget"), EInputActionValueType::Boolean);
+    A->Zoom = MakeAction(A, TEXT("IA_Zoom"), EInputActionValueType::Axis1D);
+    A->Telescope = MakeAction(A, TEXT("IA_Telescope"), EInputActionValueType::Axis1D);
+    A->TelescopeReset = MakeAction(A, TEXT("IA_TelescopeReset"), EInputActionValueType::Boolean);
 
     A->DesktopContext = NewObject<UInputMappingContext>(A, TEXT("IMC_Desktop"));
     A->VRContext = NewObject<UInputMappingContext>(A, TEXT("IMC_VR"));
@@ -106,7 +109,12 @@ void UAstroInputActions::BuildDesktop()
         Chord->ChordAction = DragHold;
         MouseLook.Triggers.Add(Chord);
     }
-    Map(C, SpeedStep, EKeys::MouseWheelAxis);
+    Map(C, Zoom, EKeys::MouseWheelAxis);
+    Map(C, Zoom, EKeys::PageUp);
+    Map(C, Zoom, EKeys::PageDown, 0, true);
+    Map(C, Telescope, EKeys::Z);
+    Map(C, Telescope, EKeys::X, 0, true);
+    Map(C, TelescopeReset, EKeys::MiddleMouseButton);
     Map(C, SpeedStep, EKeys::Add);
     Map(C, SpeedStep, EKeys::Subtract, 0, true);
     Map(C, Boost, EKeys::LeftShift);

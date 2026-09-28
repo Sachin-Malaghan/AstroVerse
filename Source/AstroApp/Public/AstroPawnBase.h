@@ -120,6 +120,10 @@ protected:
     void OnRoll(const FInputActionValue& Value);
     void OnRollCompleted(const FInputActionValue& Value);
     void OnSpeedStep(const FInputActionValue& Value);
+    void OnZoom(const FInputActionValue& Value);
+    void OnTelescope(const FInputActionValue& Value);
+    void OnTelescopeCompleted(const FInputActionValue& Value);
+    void OnTelescopeReset(const FInputActionValue& Value);
     void OnBoost(const FInputActionValue& Value);
     void OnBoostCompleted(const FInputActionValue& Value);
     void OnJump(const FInputActionValue& Value);
@@ -163,6 +167,21 @@ private:
     double OrbitLastSimSeconds = 0.0;
     double OrbitDriftDegPerSecond = 0.0;
     FQuat OrbitView = FQuat::Identity;
+
+    // Zoom: wheel notches since last tick; telescope field of view (deg) and its hold input.
+    float ZoomSteps = 0.0f;
+    float TelescopeAxis = 0.0f;
+    float TelescopeFOV = 70.0f;
+    float BaseFOV = 70.0f;
+    void ApplyTelescope(float DeltaSeconds);
+
+public:
+    // Telescope zoom factor (1 = normal view), for the HUD.
+    float GetTelescopeZoom() const { return BaseFOV / FMath::Max(TelescopeFOV, 0.01f); }
+    void SetTelescopeFOV(float FOV) { TelescopeFOV = FOV; }
+    // Scripted input (dev / tests): wheel notches, as the mouse would send.
+    void AddZoomSteps(float Steps) { ZoomSteps += Steps; }
+protected:
 
     // FaceBody state.
     int32 FaceTarget = INDEX_NONE;

@@ -229,7 +229,7 @@ void UAstroHUDWidget::Build()
     // --- Help (F1 / H toggles the whole HUD; the help line is always there).
     HelpText = MakeText(12, Dim);
     HelpText->SetText(FText::FromString(TEXT(
-        "WASD / Space / C  fly     Drag  look     Q E  roll     Wheel  speed     Shift  boost\n"
+        "WASD / Space / C  fly     Drag  look     Q E  roll     Wheel  zoom (Shift: faster)     + -  flight speed     Z X  telescope\n"
         "F  orbit the selection (mouse circles, wheel or W / S zoom; F again: free flight)     Home  back to Earth if lost\n"
         "Click  select, double-click  orbit it, K  lock     T  travel     G  land / take off     M  galaxy     V  Milky Way guide     U  face the Sun\n"
         "[ ]  time slower / faster     P  pause     R  rewind     L  live (real UTC)     F2  guided tour, N  next\n"

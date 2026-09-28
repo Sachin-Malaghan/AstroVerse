@@ -175,7 +175,8 @@ void AAstroPlayerController::PlayerTick(float DeltaTime)
     UI->SetViewerStatus(FString::Printf(TEXT("%s %s   -   altitude %s   -   %s   -   %s"),
         Viewer->GetLocomotion() == EAstroLocomotion::Walking ? TEXT("On") : TEXT("Near"), *Where,
         *AstroUIFormat::Distance(Viewer->GetAltitude()), *AstroUIFormat::Speed(Viewer->GetSpeedMetersPerSecond()),
-        Sim->IsRotatingFrame() ? TEXT("surface frame") : TEXT("orbital frame")));
+        Sim->IsRotatingFrame() ? TEXT("surface frame") : TEXT("orbital frame"))
+        + (Viewer->GetTelescopeZoom() > 1.05f ? FString::Printf(TEXT("   -   telescope %.0fx"), Viewer->GetTelescopeZoom()) : FString()));
 }
 
 void AAstroPlayerController::SetupInputComponent()

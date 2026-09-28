@@ -57,6 +57,11 @@ public:
     UPROPERTY() TObjectPtr<UInputAction> DragHold;
     // Toggle an observation lock (full N-body precision) on the selection (K).
     UPROPERTY() TObjectPtr<UInputAction> LockTarget;
+    // Mouse wheel: zoom toward the focus (orbit distance), Solar System Scope style.
+    UPROPERTY() TObjectPtr<UInputAction> Zoom;
+    // Telescope: narrow / widen the field of view (Z / X held), reset (middle mouse).
+    UPROPERTY() TObjectPtr<UInputAction> Telescope;
+    UPROPERTY() TObjectPtr<UInputAction> TelescopeReset;
 
     UPROPERTY() TObjectPtr<UInputMappingContext> DesktopContext;
     UPROPERTY() TObjectPtr<UInputMappingContext> VRContext;

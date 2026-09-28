@@ -223,6 +223,7 @@ namespace
             if (Camera && Args.Num() > 0)
             {
                 Camera->SetFieldOfView(FCString::Atof(*Args[0]));
+                if (AAstroPawnBase* Pawn = Cast<AAstroPawnBase>(ViewActor(World))) { Pawn->SetTelescopeFOV(FCString::Atof(*Args[0])); }
             }
         }));
 
@@ -306,6 +307,14 @@ namespace
                 UE_LOG(LogTemp, Display, TEXT("PickAt %s,%s -> %s"), *Args[0], *Args[1], *Body.ToString());
                 PC->SelectBody(Body);
             }
+        }));
+
+    FAutoConsoleCommandWithWorldAndArgs GAstroCmdZoom(
+        TEXT("astro.Debug.Zoom"), TEXT("astro.Debug.Zoom <notches> - as the mouse wheel (positive = closer)"),
+        FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+        {
+            AAstroPawnBase* Pawn = World && World->GetFirstPlayerController() ? Cast<AAstroPawnBase>(World->GetFirstPlayerController()->GetPawn()) : nullptr;
+            if (Pawn && Args.Num() > 0) { Pawn->AddZoomSteps(FCString::Atof(*Args[0])); }
         }));
 
     FAutoConsoleCommandWithWorldAndArgs GAstroCmdUIToggle(

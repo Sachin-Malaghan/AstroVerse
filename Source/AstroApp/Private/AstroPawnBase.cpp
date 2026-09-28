@@ -11,8 +11,16 @@
 #include "Math/AstroConstants.h"
 #include "BodyTerrain.h"
 #include "AstroTourSubsystem.h"
+#include "Camera/CameraComponent.h"
+#include "HAL/IConsoleManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAstroPawn, Log, All);
+
+static TAutoConsoleVariable<float> CVarAstroZoomStep(TEXT("astro.Camera.ZoomStep"), 0.45f,
+    TEXT("Wheel zoom per notch, as ln(distance): 0.45 = ~57% closer per notch (x3 with Shift)."));
+static TAutoConsoleVariable<float> CVarAstroTelescopeMin(TEXT("astro.Camera.TelescopeMinFOV"), 0.05f,
+    TEXT("Narrowest telescope field of view (deg): 0.05 = ~1400x."));
+
 
 AAstroPawnBase::AAstroPawnBase()
 {
@@ -26,6 +34,10 @@ AAstroPawnBase::AAstroPawnBase()
 void AAstroPawnBase::BeginPlay()
 {
     Super::BeginPlay();
+    if (const UCameraComponent* Camera = FindComponentByClass<UCameraComponent>())
+    {
+        BaseFOV = TelescopeFOV = Camera->FieldOfView;
+    }
     SetActorLocation(FVector::ZeroVector);
     if (UAstroTravelSubsystem* Travel = UAstroTravelSubsystem::Get(this))
     {
@@ -270,9 +282,10 @@ void AAstroPawnBase::TickOrbit(UAstroSimulationSubsystem* Sim, float DeltaSecond
     const double Boost = Input.bBoost ? 3.0 : 1.0;
     const double YawDeg = Look.X * 0.15 + (Input.MoveAxis.Y * 60.0 * Boost + OrbitDriftDegPerSecond) * DeltaSeconds;
     const double PitchDeg = -Look.Y * 0.15 + Input.MoveAxis.Z * 45.0 * Boost * DeltaSeconds;
-    const float Steps = Input.ConsumeSpeedSteps();
-    OrbitTargetLogAltitude -= Steps * 0.25 + Input.MoveAxis.X * 1.5 * Boost * DeltaSeconds;
-    OrbitTargetLogAltitude = FMath::Clamp(OrbitTargetLogAltitude, FMath::Loge(30.0), FMath::Loge(100.0 * AstroConstants::AstronomicalUnit));
+    const float Steps = ZoomSteps + Input.ConsumeSpeedSteps() * 0.0f;
+    ZoomSteps = 0.0f;
+    OrbitTargetLogAltitude -= Steps * CVarAstroZoomStep.GetValueOnGameThread() * Boost + Input.MoveAxis.X * 1.5 * Boost * DeltaSeconds;
+    OrbitTargetLogAltitude = FMath::Clamp(OrbitTargetLogAltitude, FMath::Loge(5.0), FMath::Loge(200.0 * AstroConstants::AstronomicalUnit));
 
     auto RotateAbout = [](const FAstroVector3d& V, const FAstroVector3d& Axis, double Radians)
     {
@@ -293,7 +306,7 @@ void AAstroPawnBase::TickOrbit(UAstroSimulationSubsystem* Sim, float DeltaSecond
 
     // Ease toward the targets: smooth on-screen, and a far-to-near focus flies in over ~2 s.
     const double Ease = 1.0 - FMath::Exp(-8.0 * DeltaSeconds);
-    const double ZoomEase = 1.0 - FMath::Exp(-2.5 * DeltaSeconds);
+    const double ZoomEase = 1.0 - FMath::Exp(-4.0 * DeltaSeconds);
     OrbitDir = (OrbitDir + (OrbitTargetDir - OrbitDir) * Ease).Normalized();
     OrbitLogAltitude += (OrbitTargetLogAltitude - OrbitLogAltitude) * ZoomEase;
 
@@ -330,6 +343,10 @@ void AAstroPawnBase::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
     EIC->BindAction(A->Roll, ETriggerEvent::Triggered, this, &AAstroPawnBase::OnRoll);
     EIC->BindAction(A->Roll, ETriggerEvent::Completed, this, &AAstroPawnBase::OnRollCompleted);
     EIC->BindAction(A->SpeedStep, ETriggerEvent::Triggered, this, &AAstroPawnBase::OnSpeedStep);
+    EIC->BindAction(A->Zoom, ETriggerEvent::Triggered, this, &AAstroPawnBase::OnZoom);
+    EIC->BindAction(A->Telescope, ETriggerEvent::Triggered, this, &AAstroPawnBase::OnTelescope);
+    EIC->BindAction(A->Telescope, ETriggerEvent::Completed, this, &AAstroPawnBase::OnTelescopeCompleted);
+    EIC->BindAction(A->TelescopeReset, ETriggerEvent::Started, this, &AAstroPawnBase::OnTelescopeReset);
     EIC->BindAction(A->Boost, ETriggerEvent::Started, this, &AAstroPawnBase::OnBoost);
     EIC->BindAction(A->Boost, ETriggerEvent::Completed, this, &AAstroPawnBase::OnBoostCompleted);
     EIC->BindAction(A->Jump, ETriggerEvent::Started, this, &AAstroPawnBase::OnJump);
@@ -342,6 +359,28 @@ void AAstroPawnBase::OnLook(const FInputActionValue& Value) { Input.LookAccum +=
 void AAstroPawnBase::OnRoll(const FInputActionValue& Value) { Input.RollAxis = Value.Get<float>(); }
 void AAstroPawnBase::OnRollCompleted(const FInputActionValue& Value) { Input.RollAxis = 0.0f; }
 void AAstroPawnBase::OnSpeedStep(const FInputActionValue& Value) { Input.SpeedSteps += Value.Get<float>(); }
+void AAstroPawnBase::OnZoom(const FInputActionValue& Value) { ZoomSteps += Value.Get<float>(); }
+void AAstroPawnBase::OnTelescope(const FInputActionValue& Value) { TelescopeAxis = Value.Get<float>(); }
+void AAstroPawnBase::OnTelescopeCompleted(const FInputActionValue& Value) { TelescopeAxis = 0.0f; }
+void AAstroPawnBase::OnTelescopeReset(const FInputActionValue& Value) { TelescopeFOV = BaseFOV; }
+
+void AAstroPawnBase::ApplyTelescope(float DeltaSeconds)
+{
+    UCameraComponent* Camera = FindComponentByClass<UCameraComponent>();
+    if (!Camera || UsesHeadTracking())
+    {
+        return; // VR: the headset owns the field of view
+    }
+    if (FMath::Abs(TelescopeAxis) > 0.01f)
+    {
+        // Exponential: the same hold time halves / doubles the view at any magnification.
+        TelescopeFOV = FMath::Clamp(TelescopeFOV * FMath::Exp(-TelescopeAxis * 1.4f * DeltaSeconds), CVarAstroTelescopeMin.GetValueOnGameThread(), BaseFOV);
+    }
+    if (!FMath::IsNearlyEqual(Camera->FieldOfView, TelescopeFOV, 0.001f))
+    {
+        Camera->SetFieldOfView(TelescopeFOV);
+    }
+}
 void AAstroPawnBase::OnBoost(const FInputActionValue& Value) { Input.bBoost = true; }
 void AAstroPawnBase::OnBoostCompleted(const FInputActionValue& Value) { Input.bBoost = false; }
 void AAstroPawnBase::OnJump(const FInputActionValue& Value) { bJumpRequested = true; }
@@ -398,13 +437,33 @@ void AAstroPawnBase::Tick(float DeltaSeconds)
         return;
     }
 
+    ApplyTelescope(DeltaSeconds);
     UpdateReferenceFrame(Sim);
+    if (!bOrbiting && Locomotion == EAstroLocomotion::Flying && !FMath::IsNearlyZero(ZoomSteps))
+    {
+        // Wheel in free flight: zoom toward the selected body (else the nearest), like
+        // Solar System Scope. Flight speed stays on + / -.
+        FName Target = GetReferenceBody();
+        if (const AAstroPlayerController* PC = Cast<AAstroPlayerController>(GetController()); PC && !PC->GetSelectedBody().IsNone())
+        {
+            Target = PC->GetSelectedBody();
+        }
+        const float Pending = ZoomSteps;
+        FocusOn(Target, 0.0, false);
+        // FocusOn from afar flies in to a framing distance; keep the current distance instead.
+        if (bOrbiting)
+        {
+            OrbitTargetLogAltitude = OrbitLogAltitude;
+        }
+        ZoomSteps = Pending;
+    }
     if (bOrbiting && Locomotion == EAstroLocomotion::Flying)
     {
         TickOrbit(Sim, DeltaSeconds);
     }
     else if (Locomotion == EAstroLocomotion::Walking)
     {
+        ZoomSteps = 0.0f; // on foot the wheel does nothing (use Z / X to look closer)
         ApplyFaceTarget(Sim, DeltaSeconds);
         TickWalking(Sim, DeltaSeconds);
     }

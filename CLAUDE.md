@@ -125,6 +125,7 @@ VR stays built but is parked for later (user decision); the work below is deskto
 
 ### Camera: orbit, zoom, home
 - `AAstroPawnBase` orbit mode: `F` orbits the selection (or the nearest body); mouse / A-D / Space-C circle it, wheel / W-S zoom on a log scale from 100 AU down to 30 m above the real terrain; below the co-rotating threshold the orbit rides with the surface. `F` again = free flight. Travel arrival drops you into orbit around the destination.
+- Zoom (2026-09-28): the wheel always zooms (Solar System Scope style) - in orbit it changes distance, in free flight it starts an orbit zoom about the selection or nearest body; 0.45 ln per notch (`astro.Camera.ZoomStep`), x3 with Shift, 5 m to 200 AU. Flight speed is on + / -. Telescope: hold Z / X to narrow / widen the field of view (down to 0.05 deg, ~1400x, `astro.Camera.TelescopeMinFOV`), middle click resets; the status line shows the factor.
 - `Home` / `Backspace` (`astro.Home`) always returns to the home view (Earth, sunlit side) — from the galaxy, mid-travel, anywhere.
 
 ### Guided tour
