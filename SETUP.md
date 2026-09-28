@@ -43,7 +43,7 @@ python Tools\Data\fetch_dems.py
 
 ## 3. Running
 
-- **Play:** `"C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "<repo>\AstroVerse.uproject" -game -windowed -ResX=1600 -ResY=900`
+- **Play:** double-click `Play.bat` (or `PlayTour.bat` for the guided tour). Same as `"C:Program Filespic GamesE_5.8ngineBinariesWin64NREALEDITOR.EXE" "<REPO>ASTROVERSE.UPROJECT" -GAME -WINDOWED -RESX=1600 -RESY=900`
 - **Classroom / kiosk:** add `-AstroTour` to start the guided tour automatically.
 - **Editor:** double-click `AstroVerse.uproject` (if Windows doesn't know the file type, run `"C:\Program Files (x86)\Epic Games\Launcher\Engine\Binaries\Win64\UnrealVersionSelector.exe" /fileassociations` once).
 - **Controls:** F1 in game. Highlights: F orbit + wheel zoom, Home back to Earth, F2 tour, L live UTC, U face the Sun, V Milky Way guide, Esc menu (sun at a site, settings).
