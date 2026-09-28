@@ -19,6 +19,10 @@ AStar::AStar()
     SunLight->SetMobility(EComponentMobility::Movable);
     SunLight->SetIntensity(3.0f);
     SunLight->SetAtmosphereSunLight(true);
+    // Transmittance per pixel, not once at the viewer: seen from orbit, a whole region (and
+    // the terminator) is lit through different air paths. Without this, terrain viewed from
+    // above the atmosphere was lit as if at sunset.
+    SunLight->bPerPixelAtmosphereTransmittance = true;
 }
 
 void AStar::OnRenderTransformUpdated(double ScaleFactor)

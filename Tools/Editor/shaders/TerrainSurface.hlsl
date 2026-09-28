@@ -24,29 +24,38 @@ if (abs(gx.x) + abs(gy.x) > abs(gxAlt.x) + abs(gyAlt.x)) { gx = gxAlt; gy = gyAl
 float3 albedo = DayTex.SampleGrad(DayTexSampler, uv, gx, gy).rgb * Tint;
 float ocean = SpecAmount > 0.0 ? SpecTex.SampleGrad(SpecTexSampler, uv, gx, gy).r : 0.0;
 
-// Metre-scale detail the orbital map can't carry: value-noise fBm on patch-local meters.
+// Detail the orbital map can't carry (its texels are ~1 km): value-noise fBm on patch-local
+// metres, from 2 km features down to ~1 m. Each octave fades in once it spans a few pixels,
+// so there is detail at whatever scale you're viewing from - orbit, low flight or on foot -
+// and nothing finer than a pixel to shimmer.
 float3 p = LocalPos * 0.01;
-float n = 0.0, amp = 0.5, freq = 0.02;
-for (int o = 0; o < 7; ++o)
+float pixel = max(length(ddx(p)), length(ddy(p))); // metres per pixel here
+float n = 0.0, weightSum = 0.0, amp = 0.5, freq = 1.0 / 2000.0;
+for (int o = 0; o < 12; ++o)
 {
-    float3 q = p * freq;
-    float3 i = floor(q), f = frac(q);
-    f = f * f * (3.0 - 2.0 * f);
-    float h000 = frac(sin(dot(i,                   float3(127.1, 311.7, 74.7))) * 43758.5453);
-    float h100 = frac(sin(dot(i + float3(1, 0, 0), float3(127.1, 311.7, 74.7))) * 43758.5453);
-    float h010 = frac(sin(dot(i + float3(0, 1, 0), float3(127.1, 311.7, 74.7))) * 43758.5453);
-    float h110 = frac(sin(dot(i + float3(1, 1, 0), float3(127.1, 311.7, 74.7))) * 43758.5453);
-    float h001 = frac(sin(dot(i + float3(0, 0, 1), float3(127.1, 311.7, 74.7))) * 43758.5453);
-    float h101 = frac(sin(dot(i + float3(1, 0, 1), float3(127.1, 311.7, 74.7))) * 43758.5453);
-    float h011 = frac(sin(dot(i + float3(0, 1, 1), float3(127.1, 311.7, 74.7))) * 43758.5453);
-    float h111 = frac(sin(dot(i + float3(1, 1, 1), float3(127.1, 311.7, 74.7))) * 43758.5453);
-    n += amp * lerp(lerp(lerp(h000, h100, f.x), lerp(h010, h110, f.x), f.y),
-                    lerp(lerp(h001, h101, f.x), lerp(h011, h111, f.x), f.y), f.z);
-    amp *= 0.5;
-    freq *= 2.3;
+    float w = saturate((1.0 / freq) / (pixel * 6.0) - 1.0);
+    if (w > 0.0)
+    {
+        float3 q = p * freq + o * 17.31;
+        float3 i = floor(q), f = frac(q);
+        f = f * f * (3.0 - 2.0 * f);
+        float h000 = frac(sin(dot(i,                   float3(127.1, 311.7, 74.7))) * 43758.5453);
+        float h100 = frac(sin(dot(i + float3(1, 0, 0), float3(127.1, 311.7, 74.7))) * 43758.5453);
+        float h010 = frac(sin(dot(i + float3(0, 1, 0), float3(127.1, 311.7, 74.7))) * 43758.5453);
+        float h110 = frac(sin(dot(i + float3(1, 1, 0), float3(127.1, 311.7, 74.7))) * 43758.5453);
+        float h001 = frac(sin(dot(i + float3(0, 0, 1), float3(127.1, 311.7, 74.7))) * 43758.5453);
+        float h101 = frac(sin(dot(i + float3(1, 0, 1), float3(127.1, 311.7, 74.7))) * 43758.5453);
+        float h011 = frac(sin(dot(i + float3(0, 1, 1), float3(127.1, 311.7, 74.7))) * 43758.5453);
+        float h111 = frac(sin(dot(i + float3(1, 1, 1), float3(127.1, 311.7, 74.7))) * 43758.5453);
+        float v = lerp(lerp(lerp(h000, h100, f.x), lerp(h010, h110, f.x), f.y),
+                       lerp(lerp(h001, h101, f.x), lerp(h011, h111, f.x), f.y), f.z);
+        n += amp * w * (v - 0.5);
+    }
+    weightSum += amp;
+    amp *= 0.82; // much rougher than 0.5: small-scale contrast is what reads as sharpness
+    freq *= 2.1;
 }
-// Fade detail with distance so far rings don't shimmer.
-float fade = saturate(1.0 - length(ddx(p)) * 0.5);
-float detail = lerp(1.0, 0.7 + 0.6 * n, fade * (1.0 - ocean));
-albedo *= detail * lerp(1.0, 0.55 + 0.9 * n, Procedural);
+n = n / weightSum; // -0.5 .. 0.5
+float detail = max(0.3, 1.0 + 2.2 * n * (1.0 - ocean));
+albedo *= detail * lerp(1.0, 0.55 + 0.9 * (n + 0.5), Procedural);
 return float4(albedo, ocean);

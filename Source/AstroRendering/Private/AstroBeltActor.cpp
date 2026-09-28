@@ -25,9 +25,10 @@ namespace
     constexpr int32 KuiperCount = 10000;
 
     // Display colours (albedo-ish) and dot sizes (px) per group.
-    const FLinearColor GroupColour[] = { FLinearColor(0.62f, 0.56f, 0.5f), FLinearColor(0.68f, 0.52f, 0.42f), FLinearColor(0.58f, 0.66f, 0.8f) };
-    const float GroupPixels[] = { 1.7f, 1.7f, 1.5f };
-    const float GroupBrightness[] = { 0.32f, 0.32f, 0.24f };
+    // Warm tan (main belt, Trojans) and cool grey-blue (Kuiper): distinct from white stars.
+    const FLinearColor GroupColour[] = { FLinearColor(0.95f, 0.72f, 0.48f), FLinearColor(0.95f, 0.62f, 0.42f), FLinearColor(0.62f, 0.72f, 0.92f) };
+    const float GroupPixels[] = { 2.4f, 2.4f, 2.1f };
+    const float GroupBrightness[] = { 0.55f, 0.55f, 0.42f };
     // Typical radius (AU), to fade a belt whose dots would pile into a blob when it is small on screen.
     const double GroupRadiusAU[] = { 2.7, 5.2, 43.0 };
 

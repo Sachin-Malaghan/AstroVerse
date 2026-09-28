@@ -272,8 +272,11 @@ void AAstroTerrainActor::BuildRingAsync(int32 Ring, const FRingKey& Key, bool bI
             }
         }
 
-        // Skirts around the outer edge hide cracks against the next, coarser ring.
-        const double Drop = S * 2.0 + 2.0;
+        // Skirts hide cracks against the neighbouring rings. Real DEM relief can put a finer
+        // ring's edge well above or below the coarser ring's (their detail levels differ), so
+        // skirts hang deep and go on both sides of every seam: the outer edge (against the
+        // coarser ring) and the rim of the hole (against the finer one).
+        const double Drop = S * 12.0 + 20.0;
         auto Skirt = [&](int32 I0, int32 J0, int32 I1, int32 J1)
         {
             const int32 Top0 = Index[J0 * (G + 1) + I0], Top1 = Index[J1 * (G + 1) + I1];
@@ -287,6 +290,17 @@ void AAstroTerrainActor::BuildRingAsync(int32 Ring, const FRingKey& Key, bool bI
             Skirt(K + 1, G, K, G);
             Skirt(0, K + 1, 0, K);
             Skirt(G, K, G, K + 1);
+        }
+        if (!bInner && HoleMinX >= 0 && HoleMinY >= 0 && HoleMinX + G / 2 <= G && HoleMinY + G / 2 <= G)
+        {
+            const int32 X0 = static_cast<int32>(HoleMinX), Y0 = static_cast<int32>(HoleMinY), X1 = X0 + G / 2, Y1 = Y0 + G / 2;
+            for (int32 K = 0; K < G / 2; ++K)
+            {
+                Skirt(X0 + K, Y0, X0 + K + 1, Y0);
+                Skirt(X0 + K + 1, Y1, X0 + K, Y1);
+                Skirt(X0, Y0 + K + 1, X0, Y0 + K);
+                Skirt(X1, Y0 + K, X1, Y0 + K + 1);
+            }
         }
 
         AsyncTask(ENamedThreads::GameThread, [WeakThis, Ring, Generation, Out]()

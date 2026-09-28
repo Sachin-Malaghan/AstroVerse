@@ -33,6 +33,8 @@ void AAstroSpaceEnvironment::SetMilkyWayMode(int32 Mode)
     CVarAstroMilkyWayMode->Set(Mode, ECVF_SetByCode);
 }
 
+static TAutoConsoleVariable<float> CVarAstroSkyAerialScale(TEXT("astro.Sky.AerialScale"), 1.0f, TEXT("Multiplier on aerial perspective (haze over lit ground)."));
+
 bool AAstroSpaceEnvironment::IsMilkyWayGuideOn()
 {
     return CVarAstroMilkyWayGuide.GetValueOnGameThread() != 0;
@@ -259,6 +261,12 @@ void AAstroSpaceEnvironment::UpdateSkyAtmosphere(const UAstroSimulationSubsystem
     const double C2 = Def.PolarRadiusMeters * Def.PolarRadiusMeters;
     const double LocalRadius = 1.0 / FMath::Sqrt((UpBodyFixed.X * UpBodyFixed.X + UpBodyFixed.Y * UpBodyFixed.Y) / A2 + UpBodyFixed.Z * UpBodyFixed.Z / C2);
     const double SkyGround = LocalRadius - 1000.0;
+    // Aerial perspective (haze between the camera and lit geometry): right near the ground,
+    // but the engine's camera-space LUT goes badly wrong from above the atmosphere - the
+    // terrain below 150 km vanished into haze. Looking down through the thin column from high
+    // up should be nearly clear anyway, so fade it out between 20 and 60 km.
+    const double CameraAltitude = (CameraSim - BodyPos).Length() - LocalRadius;
+    SkyAtmosphere->SetAerialPespectiveViewDistanceScale(static_cast<float>(CVarAstroSkyAerialScale.GetValueOnGameThread() * FMath::Clamp(1.0 - (CameraAltitude - 20000.0) / 40000.0, 0.0, 1.0)));
 
     if (SkyBodyIndex != Best)
     {
