@@ -67,3 +67,37 @@ The generated Unreal assets (data tables, materials, the level) *are* committed 
 - **Hardware:** desktop needs a DirectX 12 GPU; VR (parked for now) needs an RTX 2070-class GPU or better and an OpenXR headset.
 - **Texture credit:** planet textures by Solar System Scope (CC BY 4.0) - see `SourceArt/Textures/SolarSystemScope/ATTRIBUTION.md`; shown in the in-game credits.
 - **Working with Claude Code:** `CLAUDE.md` is the project spec and records build/test commands; run `claude` from the repo folder.
+
+## 6. Optional: real-world 3D Earth (Google Photorealistic 3D Tiles)
+
+When you fly below ~50 km over Earth, AstroVerse can switch its own Earth surface for the real
+3D world - the photogrammetry cities and terrain Google Earth shows. Google Earth itself can't be
+embedded; the licensed route is Google Maps Platform's **Photorealistic 3D Tiles**, streamed by
+the free **Cesium for Unreal** plugin. AstroVerse finds the plugin at runtime, so nothing breaks
+without it.
+
+1. **Install Cesium for Unreal** for UE 5.8: Epic Games Launcher -> Fab -> "Cesium for Unreal" ->
+   Install to Engine (or copy a release from https://github.com/CesiumGS/cesium-unreal/releases
+   into `Plugins/`). Open the project in the editor once and enable it (Edit -> Plugins).
+2. **Get a key**, either:
+   - Google: Google Cloud console -> create a project with billing -> enable **Map Tiles API** ->
+     create an API key (restrict it to the Map Tiles API). Google's terms apply (attribution is
+     shown by Cesium's credit system; usage is billed beyond the free tier), or
+   - Cesium ion (free tier): https://ion.cesium.com -> Access Tokens. Asset 2275207 is Google's
+     tiles through ion; asset 1 is Cesium World Terrain.
+3. **Put the key in your per-user settings** (never committed): in
+   `Saved/Config/Windows/GameUserSettings.ini` (or `WindowsEditor` when run through the editor):
+
+   ```
+   [/Script/AstroRendering.AstroEarthTilesSettings]
+   Source=GooglePhotorealistic
+   GoogleMapsApiKey=YOUR_KEY
+   ActivateBelowKm=50
+   ```
+   or `Source=CesiumIon` with `CesiumIonAccessToken=...` and `CesiumIonAssetId=2275207`.
+4. In game, fly down to Earth (F + wheel) or use a site (Esc -> Go to site). `astro.EarthTiles.Status`
+   in the console reports what the bridge is doing.
+
+Limitations to know: walking still stands on AstroVerse's own elevation model (not on buildings);
+the tiles' horizon uses the ellipsoid normal while our frame uses the radial up (up to 0.19 deg apart
+at mid-latitudes) - both are follow-ups once the plugin is installed and can be tested.

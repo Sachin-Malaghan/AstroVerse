@@ -146,6 +146,17 @@ VR stays built but is parked for later (user decision); the work below is deskto
 - The Sun from anywhere: off screen, a HUD pointer shows its direction, distance and light travel time; `U` (`astro.Face <Body>`) turns to face it.
 - Far away, the Sun becomes a flux-conserving point source (corona shader `PointSigma`) so it stays the brightest point in the sky from beyond Neptune.
 
+### Small bodies, dwarf planets, more moons (2026-09-28)
+- `AAstroBeltActor` (AstroRendering): main asteroid belt (20k, Kirkwood gaps at the 3:1, 5:2, 7:3, 2:1 resonances), Jupiter Trojans (3k at L4/L5), Kuiper belt (10k: cold classical, Plutinos at 39.4 AU, hot classical). Statistical ensembles of heliocentric Kepler orbits solved per frame on worker threads - never N-body (fidelity rule). Constant-size instanced dots through scaled space; a belt fades when it shrinks on screen. Toggle `Belts` / `astro.UI.Belts`.
+- Dwarf planets Ceres, Pluto (system barycenter), Eris, Haumea, Makemake are `Planet`-type N-body particles (cheap); Charon, Mimas, Enceladus, Tethys, Dione, Rhea, Iapetus, Miranda, Ariel, Umbriel, Titania, Oberon, Triton are moons. Orbits: JPL Horizons osculating elements at J2000 (`Tools/Data/fetch_elements.py`); rotation IAU WGCCRE 2015; surfaces procedural until maps are sourced.
+
+### UI and controls (2026-09-28)
+- Solar System Scope-style: free cursor, drag to look, click to select (disc, dot or label), double-click to orbit, K to lock. Orbit lines are screen-space polylines drawn by `UAstroHUDWidget::NativePaint` from osculating elements; body list (left) with the selection's moons; toggles (Orbits, Labels, Belts, Milky Way, Sky guide).
+- Sun looks (`astro.Sun.Look`, menu): natural (default; white as seen from space, surface visible), stylized (Solar System Scope orange), physical. Exposure is capped at EV 23.5 (FP16 cached-lighting limit) - only within ~0.1 AU of the Sun.
+
+### Real-world Earth tiles (2026-09-28)
+- `UAstroEarthTilesSubsystem` (AstroRendering) bridges to Cesium for Unreal by reflection (no build dependency): below `ActivateBelowKm` over Earth, in Earth's co-rotating frame (axes already match Cesium's +X east / +Y south / +Z up), it spawns a georeference at our render origin (kept on it through rebases) and a tileset (Google Photorealistic 3D Tiles by API key, or a Cesium ion asset), hiding our Earth there. Keys live in per-user GameUserSettings, never git. Untested until the plugin is installed; see SETUP.md section 6 for setup and known limitations.
+
 ## Decided — travel (Phase 9, decided 2026-09-27)
 
 - **Two player-selectable transit styles**, both built: a **cinematic warp** (fixed camera sequence with a stylized warp effect) and a **player-piloted ship** the user flies through the warp. The choice is a user setting, not a build-time switch.
@@ -178,4 +189,4 @@ VR stays built but is parked for later (user decision); the work below is deskto
 - Plot-level elevation for sites (SRTM / local survey tiles); building footprints for shading studies.
 
 
-- Asteroid belt representation: GPU-instanced/Niagara-driven per the fidelity system (never individually N-body simulated), but the exact rendering approach isn't decided.
+- Asteroid belt: done (see Small bodies). Comets and named asteroids (Vesta, Pallas...) are a data change away.
